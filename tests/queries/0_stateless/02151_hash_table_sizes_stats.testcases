@@ -1,0 +1,246 @@
+test_one_thread_no_group_by() {
+  expected_size_hint=1
+  prepare_table
+
+  query="
+  -- size_hint = $expected_size_hint --
+    SELECT COUNT(number)
+      FROM $table_name
+  SETTINGS max_threads = 1
+    FORMAT Null;"
+
+  run_query
+  check_logs_for_new_size_hint
+  run_query
+  check_logs_for_no_new_size_hint
+  check_logs_for_preallocate_singlethreaded $expected_size_hint
+  print_border
+}
+
+test_one_thread_simple_group_by() {
+  expected_size_hint=$table_size
+  prepare_table
+
+  query="
+  -- size_hint = $expected_size_hint; --
+    SELECT number
+      FROM $table_name
+  GROUP BY number
+  SETTINGS max_threads = 1
+    FORMAT Null;"
+
+  run_query
+  check_logs_for_new_size_hint
+  run_query
+  check_logs_for_no_new_size_hint
+  check_logs_for_preallocate_singlethreaded $expected_size_hint
+  print_border
+}
+
+test_one_thread_simple_group_by_with_limit() {
+  expected_size_hint=$table_size
+  prepare_table
+
+  query="
+  -- size_hint = $expected_size_hint despite the presence of limit --
+    SELECT number
+      FROM $table_name
+  GROUP BY number
+     LIMIT 5
+  SETTINGS max_threads = 1
+    FORMAT Null;"
+
+  run_query
+  check_logs_for_new_size_hint
+  run_query
+  check_logs_for_no_new_size_hint
+  check_logs_for_preallocate_singlethreaded $expected_size_hint
+  print_border
+}
+
+test_several_threads_simple_group_by_with_limit_single_level_ht() {
+  expected_size_hint=$table_size
+  prepare_table
+
+  query="
+  -- size_hint = $expected_size_hint despite the presence of limit --
+    SELECT number
+      FROM $table_name
+  GROUP BY number
+     LIMIT 5
+  SETTINGS max_threads = $max_threads,
+           group_by_two_level_threshold = $((expected_size_hint + 1)),
+           group_by_two_level_threshold_bytes = $((table_size * 1000))
+    FORMAT Null;"
+
+  run_query
+  check_logs_for_new_size_hint
+  run_query
+  check_logs_for_no_new_size_hint
+  check_logs_for_preallocate_multithreaded $((expected_size_hint / max_threads))
+  print_border
+}
+
+test_several_threads_simple_group_by_with_limit_two_level_ht() {
+  expected_size_hint=$table_size
+  prepare_table
+
+  query="
+  -- size_hint = $expected_size_hint despite the presence of limit --
+    SELECT number
+      FROM $table_name
+  GROUP BY number
+     LIMIT 5
+  SETTINGS max_threads = $max_threads,
+           group_by_two_level_threshold = $expected_size_hint,
+           group_by_two_level_threshold_bytes = $((table_size * 1000))
+    FORMAT Null;"
+
+  run_query
+  check_logs_for_new_size_hint
+  run_query
+  check_logs_for_no_new_size_hint
+  check_logs_for_convertion_to_two_level
+  print_border
+}
+
+test_several_threads_simple_group_by_external_aggregation_two_level_ht() {
+  expected_size_hint=$((table_size / 10))
+  prepare_table
+
+  query="
+  -- size_hint = group_by_two_level_threshold = $expected_size_hint ---
+    SELECT number
+      FROM $table_name
+  GROUP BY number
+  SETTINGS max_threads = $max_threads,
+           group_by_two_level_threshold = $expected_size_hint,
+           max_bytes_before_external_group_by = 1
+    FORMAT Null;"
+
+  run_query
+  check_logs_for_new_size_hint
+  run_query
+  check_logs_for_no_new_size_hint
+  check_logs_for_convertion_to_two_level
+  print_border
+}
+
+test_several_threads_simple_group_by_in_order_aggregation() {
+  expected_size_hint=$table_size
+  prepare_table_with_sorting_key number
+
+  query="
+  -- size_hint = $expected_size_hint --
+    SELECT number
+      FROM $table_name
+  GROUP BY number
+  SETTINGS max_threads = $max_threads,
+           optimize_aggregation_in_order = 1
+    FORMAT Null;"
+
+  run_query
+  check_logs_for_new_size_hint
+  run_query
+  check_logs_for_no_new_size_hint
+  # collected sizes are not used for now during in-order aggregation since
+  # latter works with each group by key in turn (without storing them in HT)
+  # and also statistics isn't used during merging of partially aggregated blocks.
+  print_border
+}
+
+test_several_threads_simple_group_by_with_limit_and_rollup_single_level_ht() {
+  expected_size_hint=$table_size
+  prepare_table
+
+  query="
+  -- size_hint = $expected_size_hint despite the presence of limit --
+       SELECT number
+         FROM $table_name
+     GROUP BY number
+  WITH ROLLUP
+        LIMIT 5
+     SETTINGS max_threads = $max_threads,
+              group_by_two_level_threshold = $((expected_size_hint + 1)),
+              group_by_two_level_threshold_bytes = $((table_size * 1000))
+       FORMAT Null;"
+
+  run_query
+  check_logs_for_new_size_hint
+  run_query
+  check_logs_for_no_new_size_hint
+  check_logs_for_preallocate_multithreaded $((expected_size_hint / max_threads))
+  print_border
+}
+
+test_several_threads_simple_group_by_with_limit_and_rollup_two_level_ht() {
+  expected_size_hint=$table_size
+  prepare_table
+
+  query="
+  -- size_hint = $expected_size_hint despite the presence of limit --
+       SELECT number
+         FROM $table_name
+     GROUP BY number
+  WITH ROLLUP
+        LIMIT 5
+     SETTINGS max_threads = $max_threads,
+              group_by_two_level_threshold = $expected_size_hint,
+              group_by_two_level_threshold_bytes = $((table_size * 1000))
+       FORMAT Null;"
+
+  run_query
+  check_logs_for_new_size_hint
+  run_query
+  check_logs_for_no_new_size_hint
+  check_logs_for_convertion_to_two_level
+  print_border
+}
+
+test_several_threads_simple_group_by_with_limit_and_cube_single_level_ht() {
+  expected_size_hint=$table_size
+  prepare_table
+
+  query="
+  -- size_hint = $expected_size_hint despite the presence of limit --
+     SELECT number
+       FROM $table_name
+   GROUP BY number
+  WITH CUBE
+      LIMIT 5
+   SETTINGS max_threads = $max_threads,
+            group_by_two_level_threshold = $((expected_size_hint + 1)),
+            group_by_two_level_threshold_bytes = $((table_size * 1000))
+     FORMAT Null;"
+
+  run_query
+  check_logs_for_new_size_hint
+  run_query
+  check_logs_for_no_new_size_hint
+  check_logs_for_preallocate_multithreaded $((expected_size_hint / max_threads))
+  print_border
+}
+
+test_several_threads_simple_group_by_with_limit_and_cube_two_level_ht() {
+  expected_size_hint=$table_size
+  prepare_table
+
+  query="
+  -- size_hint = $expected_size_hint despite the presence of limit --
+     SELECT number
+       FROM $table_name
+   GROUP BY number
+  WITH CUBE
+      LIMIT 5
+   SETTINGS max_threads = $max_threads,
+            group_by_two_level_threshold = $expected_size_hint,
+            group_by_two_level_threshold_bytes = $((table_size * 1000))
+     FORMAT Null;"
+
+  run_query
+  check_logs_for_new_size_hint
+  run_query
+  check_logs_for_no_new_size_hint
+  check_logs_for_convertion_to_two_level
+  print_border
+}
