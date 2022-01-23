@@ -41,59 +41,56 @@ prepare_table_with_sorting_key() {
 
 run_query() {
   query_id="${CLICKHOUSE_DATABASE}_hash_table_sizes_stats_$RANDOM$RANDOM"
-  $CLICKHOUSE_CLIENT --query_id="$query_id" --multiquery -q \
-    "SET max_block_size = $((table_size / 10));
-     SET merge_tree_min_rows_for_concurrent_read = 1;
-     SET max_untracked_memory = 0;
-     $query"
+  $CLICKHOUSE_CLIENT --query_id="$query_id" --multiquery -q "
+      SET max_block_size = $((table_size / 10));
+      SET merge_tree_min_rows_for_concurrent_read = 1;
+      SET max_untracked_memory = 0;
+      $query"
 }
 
 check_number_of_string_occurrences_on_initiator_satisfies_condition() {
   $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
-  $CLICKHOUSE_CLIENT                                                                                 \
-    --param_query_id="$query_id"                                                                     \
-    -q "WITH (                                                                                       \
-          SELECT COUNT(message)                                                                      \
-            FROM system.text_log                                                                     \
-           WHERE event_date >= yesterday() AND query_id = {query_id:String} AND message ILIKE '%$1%' \
-        ) AS res                                                                                     \
-        SELECT res $2"
+  $CLICKHOUSE_CLIENT --param_query_id="$query_id" -q "
+      WITH (                                                                                       
+        SELECT COUNT(message)                                                                      
+          FROM system.text_log                                                                     
+         WHERE event_date >= yesterday() AND query_id = {query_id:String} AND message ILIKE '%$1%' 
+      ) AS res                                                                                     
+      SELECT res $2"
 }
 
 check_number_of_string_occurrences_on_peer_satisfies_condition() {
   $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
-  $CLICKHOUSE_CLIENT                                                                             \
-    --param_query_id="$query_id"                                                                 \
-    -q "WITH (                                                                                   \
-          SELECT COUNT(message)                                                                  \
-            FROM system.text_log                                                                 \
-           WHERE event_date >= yesterday()                                                       \
-                 AND query_id IN (                                                               \
-                   SELECT query_id                                                               \
-                     FROM system.query_log                                                       \
-                    WHERE query_id != {query_id:String} AND initial_query_id = {query_id:String} \
-                 )                                                                               \
-                 AND message ILIKE '%$1%'                                                        \
-        ) AS res                                                                                 \
-        SELECT res $2"
+  $CLICKHOUSE_CLIENT --param_query_id="$query_id" -q "
+      WITH (                                                                                   
+        SELECT COUNT(message)                                                                  
+          FROM system.text_log                                                                 
+         WHERE event_date >= yesterday()                                                       
+               AND query_id IN (                                                               
+                 SELECT query_id                                                               
+                   FROM system.query_log                                                       
+                  WHERE query_id != {query_id:String} AND initial_query_id = {query_id:String} 
+               )                                                                               
+               AND message ILIKE '%$1%'                                                        
+      ) AS res                                                                                 
+      SELECT res $2"
 }
 
 check_number_of_string_occurrences_on_all_hosts_satisfies_condition() {
   $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
-  $CLICKHOUSE_CLIENT                                                                           \
-    --param_query_id="$query_id"                                                               \
-    -q "WITH (                                                                                 \
-          SELECT COUNT(message)                                                                \
-            FROM system.text_log                                                               \
-           WHERE event_date >= yesterday()                                                     \
-                 AND query_id IN (                                                             \
-                   SELECT query_id                                                             \
-                     FROM system.query_log                                                     \
-                    WHERE query_id = {query_id:String} OR initial_query_id = {query_id:String} \
-                 )                                                                             \
-                 AND message ILIKE '$1'                                                        \
-        ) AS res                                                                               \
-        SELECT res $2"
+  $CLICKHOUSE_CLIENT --param_query_id="$query_id" -q "
+      WITH (                                                                                 
+        SELECT COUNT(message)                                                                
+          FROM system.text_log                                                               
+         WHERE event_date >= yesterday()                                                     
+               AND query_id IN (                                                             
+                 SELECT query_id                                                             
+                   FROM system.query_log                                                     
+                  WHERE query_id = {query_id:String} OR initial_query_id = {query_id:String} 
+               )                                                                             
+               AND message ILIKE '$1'                                                        
+      ) AS res                                                                               
+      SELECT res $2"
 }
 
 check_logs_for_new_size_hint() {
