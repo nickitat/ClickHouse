@@ -278,6 +278,9 @@
     M(AsynchronousReadWaitMicroseconds, "Time spent in waiting for asynchronous reads.") \
     \
     M(MainConfigLoads, "Number of times the main configuration was reloaded.") \
+    \
+    M(HashTablesPreallocatedElements, "How many elements were preallocated in hash tables.") \
+    M(HashTablesInitedAsTwoLevel, "How many hash tables were converted to two-level from the beginning.") \
 
 namespace ProfileEvents
 {
