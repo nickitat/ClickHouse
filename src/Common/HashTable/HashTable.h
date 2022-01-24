@@ -688,7 +688,7 @@ public:
     {
         if (Cell::need_zero_value_storage)
             this->zeroValue()->setZero();
-        grower.set(reserve_for_num_elements);
+        grower.setBufSize(std::max(grower.bufSize(), reserve_for_num_elements));
         alloc(grower);
     }
 
