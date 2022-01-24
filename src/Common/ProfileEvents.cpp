@@ -278,6 +278,11 @@
     M(AsynchronousReadWaitMicroseconds, "Time spent in waiting for asynchronous reads.") \
     \
     M(MainConfigLoads, "Number of times the main configuration was reloaded.") \
+    \
+    M(HashTableStatsCacheHits, "Number of hash tables for which a size_hint was found in cache during aggregation query execution.") \
+    M(HashTableStatsCacheMisses, "The opposite to HashTableStatsCacheHits.") \
+    M(HashTableStatsCachePreallocatedElements, "How many elements were preallocated in hash tables.") \
+    M(HashTableStatsCacheConvertedToTwoLevel, "How many hash tables were converted to two-level from the beginning.") \
 
 namespace ProfileEvents
 {

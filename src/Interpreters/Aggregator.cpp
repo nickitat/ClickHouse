@@ -29,6 +29,17 @@
 
 #include <Parsers/ASTSelectQuery.h>
 
+namespace ProfileEvents
+{
+extern const Event ExternalAggregationWritePart;
+extern const Event ExternalAggregationCompressedBytes;
+extern const Event ExternalAggregationUncompressedBytes;
+extern const Event HashTableStatsCacheHits;
+extern const Event HashTableStatsCacheMisses;
+extern const Event HashTableStatsCachePreallocatedElements;
+extern const Event HashTableStatsCacheConvertedToTwoLevel;
+}
+
 namespace
 {
 /** Collects observed HashMap-s sizes to avoid redundant intermediate resizes.
@@ -36,6 +47,8 @@ namespace
 class HashTablesStatistics
 {
 public:
+    using Cache = DB::LRUCache<UInt64, size_t>;
+    using CachePtr = std::shared_ptr<Cache>;
     using Params = DB::Aggregator::Params::StatsCollectingParams;
 
     std::optional<size_t> getSizeHint(const Params & params)
@@ -64,9 +77,6 @@ public:
     }
 
 private:
-    using Cache = DB::LRUCache<UInt64, size_t>;
-    using CachePtr = std::shared_ptr<Cache>;
-
     CachePtr getHashTableStatsCache(const Params & params, [[maybe_unused]] std::lock_guard<std::mutex> & cache_lock)
     {
         if (!hash_table_stats || hash_table_stats->maxSize() != params.max_entries_for_hash_table_stats)
@@ -105,7 +115,10 @@ void initDataVariants(
             {
                 result.init(method_chosen);
                 if (result.isConvertibleToTwoLevel())
+                {
                     result.convertToTwoLevel();
+                    ProfileEvents::increment(ProfileEvents::HashTableStatsCacheConvertedToTwoLevel);
+                }
             }
             else
             {
@@ -117,8 +130,14 @@ void initDataVariants(
                 LOG_DEBUG(
                     &Poco::Logger::get("Aggregator"), "Going to preallocate {} elements for key={}", adjusted, stats_collecting_params.key);
                 result.init(method_chosen, adjusted);
+                ProfileEvents::increment(ProfileEvents::HashTableStatsCachePreallocatedElements, adjusted);
             }
+            ProfileEvents::increment(ProfileEvents::HashTableStatsCacheHits);
             return;
+        }
+        else
+        {
+            ProfileEvents::increment(ProfileEvents::HashTableStatsCacheMisses);
         }
     }
     result.init(method_chosen);
@@ -153,13 +172,6 @@ auto constructWithReserveIfPossible(size_t size_hint)
     else
         return std::make_unique<Method>();
 }
-}
-
-namespace ProfileEvents
-{
-    extern const Event ExternalAggregationWritePart;
-    extern const Event ExternalAggregationCompressedBytes;
-    extern const Event ExternalAggregationUncompressedBytes;
 }
 
 namespace DB
