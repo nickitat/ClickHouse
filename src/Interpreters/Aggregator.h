@@ -1370,4 +1370,7 @@ APPLY_FOR_AGGREGATED_VARIANTS(M)
 
 #undef M
 
+
+/** Returns pair of values (count, weight). */
+std::pair<size_t, size_t> getHashTablesCacheStatistics();
 }

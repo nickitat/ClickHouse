@@ -1,22 +1,23 @@
-#include <Interpreters/AsynchronousMetrics.h>
+#include <chrono>
+#include <Databases/IDatabase.h>
+#include <IO/MMappedFileCache.h>
+#include <IO/ReadHelpers.h>
+#include <IO/UncompressedCache.h>
+#include <Interpreters/Aggregator.h>
 #include <Interpreters/AsynchronousMetricLog.h>
-#include <Interpreters/JIT/CompiledExpressionCache.h>
-#include <Interpreters/DatabaseCatalog.h>
+#include <Interpreters/AsynchronousMetrics.h>
 #include <Interpreters/Context.h>
-#include <Common/Exception.h>
-#include <Common/setThreadName.h>
-#include <Common/CurrentMetrics.h>
-#include <Common/typeid_cast.h>
-#include <Common/filesystemHelpers.h>
+#include <Interpreters/DatabaseCatalog.h>
+#include <Interpreters/JIT/CompiledExpressionCache.h>
 #include <Server/ProtocolServerAdapter.h>
 #include <Storages/MarkCache.h>
 #include <Storages/StorageMergeTree.h>
 #include <Storages/StorageReplicatedMergeTree.h>
-#include <IO/UncompressedCache.h>
-#include <IO/MMappedFileCache.h>
-#include <IO/ReadHelpers.h>
-#include <Databases/IDatabase.h>
-#include <chrono>
+#include <Common/CurrentMetrics.h>
+#include <Common/Exception.h>
+#include <Common/filesystemHelpers.h>
+#include <Common/setThreadName.h>
+#include <Common/typeid_cast.h>
 
 
 #include "config_core.h"
@@ -584,6 +585,12 @@ void AsynchronousMetrics::update(std::chrono::system_clock::time_point update_ti
 #endif
 
     new_values["Uptime"] = getContext()->getUptimeSeconds();
+
+    {
+        const auto [count, weight] = getHashTablesCacheStatistics();
+        new_values["HashTableStatsCacheBytes"] = weight;
+        new_values["HashTableStatsCacheCells"] = count;
+    }
 
     /// Process process memory usage according to OS
 #if defined(OS_LINUX)

@@ -76,6 +76,12 @@ public:
         }
     }
 
+    CachePtr getCache()
+    {
+        std::lock_guard lock(mutex);
+        return hash_table_stats;
+    }
+
 private:
     CachePtr getHashTableStatsCache(const Params & params, [[maybe_unused]] std::lock_guard<std::mutex> & cache_lock)
     {
@@ -187,6 +193,15 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
+
+std::pair<size_t, size_t> getHashTablesCacheStatistics()
+{
+    auto & stats = getHashTablesStatistics();
+    if (auto cache = stats.getCache())
+        return std::make_pair(cache->count(), cache->weight());
+    else
+        return std::make_pair(0, 0);
+}
 
 void AggregatedDataVariants::convertToTwoLevel()
 {
