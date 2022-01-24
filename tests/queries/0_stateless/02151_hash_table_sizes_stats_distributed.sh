@@ -42,80 +42,29 @@ prepare_table_with_sorting_key() {
 run_query() {
   query_id="${CLICKHOUSE_DATABASE}_hash_table_sizes_stats_$RANDOM$RANDOM"
   $CLICKHOUSE_CLIENT --query_id="$query_id" --multiquery -q "
-      SET max_block_size = $((table_size / 10));
-      SET merge_tree_min_rows_for_concurrent_read = 1;
-      SET max_untracked_memory = 0;
-      $query"
+    SET max_block_size = $((table_size / 10));
+    SET merge_tree_min_rows_for_concurrent_read = 1;
+    SET max_untracked_memory = 0;
+    $query"
 }
 
-check_number_of_string_occurrences_on_initiator_satisfies_condition() {
+check_preallocated_elements() {
   $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
   $CLICKHOUSE_CLIENT --param_query_id="$query_id" -q "
-      WITH (                                                                                       
-        SELECT COUNT(message)                                                                      
-          FROM system.text_log                                                                     
-         WHERE event_date >= yesterday() AND query_id = {query_id:String} AND message ILIKE '%$1%' 
-      ) AS res                                                                                     
-      SELECT res $2"
+    SELECT COUNT(*)
+      FROM system.query_log                                                               
+     WHERE event_date >= yesterday() AND (query_id = {query_id:String} OR initial_query_id = {query_id:String})
+           AND ProfileEvents['HashTableStatsCachePreallocatedElements'] = $1
+  GROUP BY query_id"
 }
 
-check_number_of_string_occurrences_on_peer_satisfies_condition() {
+check_convertion_to_two_level() {
   $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
   $CLICKHOUSE_CLIENT --param_query_id="$query_id" -q "
-      WITH (                                                                                   
-        SELECT COUNT(message)                                                                  
-          FROM system.text_log                                                                 
-         WHERE event_date >= yesterday()                                                       
-               AND query_id IN (                                                               
-                 SELECT query_id                                                               
-                   FROM system.query_log                                                       
-                  WHERE query_id != {query_id:String} AND initial_query_id = {query_id:String} 
-               )                                                                               
-               AND message ILIKE '%$1%'                                                        
-      ) AS res                                                                                 
-      SELECT res $2"
-}
-
-check_number_of_string_occurrences_on_all_hosts_satisfies_condition() {
-  $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
-  $CLICKHOUSE_CLIENT --param_query_id="$query_id" -q "
-      WITH (                                                                                 
-        SELECT COUNT(message)                                                                
-          FROM system.text_log                                                               
-         WHERE event_date >= yesterday()                                                     
-               AND query_id IN (                                                             
-                 SELECT query_id                                                             
-                   FROM system.query_log                                                     
-                  WHERE query_id = {query_id:String} OR initial_query_id = {query_id:String} 
-               )                                                                             
-               AND message ILIKE '$1'                                                        
-      ) AS res                                                                               
-      SELECT res $2"
-}
-
-check_logs_for_new_size_hint() {
-  check_number_of_string_occurrences_on_all_hosts_satisfies_condition "%new size_hint=$expected_size_hint" "= 1"
-}
-
-check_logs_for_no_new_size_hint() {
-  check_number_of_string_occurrences_on_all_hosts_satisfies_condition "%new size_hint%" "= 0"
-}
-
-check_logs_for_preallocate_singlethreaded() {
-  check_number_of_string_occurrences_on_initiator_satisfies_condition "preallocate $1 elements" "= 1"
-  check_number_of_string_occurrences_on_peer_satisfies_condition "preallocate $1 elements" "= 1"
-}
-
-check_logs_for_preallocate_multithreaded() {
-  # rows may be distributed in any way including "everything goes to the one particular thread"
-  check_number_of_string_occurrences_on_initiator_satisfies_condition "preallocate $1 elements" "BETWEEN 1 AND $max_threads"
-  check_number_of_string_occurrences_on_peer_satisfies_condition "preallocate $1 elements" "BETWEEN 1 AND $max_threads"
-}
-
-check_logs_for_convertion_to_two_level() {
-  # rows may be distributed in any way including "everything goes to the one particular thread"
-  check_number_of_string_occurrences_on_initiator_satisfies_condition "converting % to two-level" "BETWEEN 1 AND $max_threads"
-  check_number_of_string_occurrences_on_peer_satisfies_condition "converting % to two-level" "BETWEEN 1 AND $max_threads"
+    SELECT SUM(ProfileEvents['HashTableStatsCacheConvertedToTwoLevel']) BETWEEN 1 AND $max_threads
+      FROM system.query_log                                                               
+     WHERE event_date >= yesterday() AND (query_id = {query_id:String} OR initial_query_id = {query_id:String}) 
+  GROUP BY query_id"
 }
 
 print_border() {

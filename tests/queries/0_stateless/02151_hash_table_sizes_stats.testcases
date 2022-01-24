@@ -10,10 +10,8 @@ test_one_thread_no_group_by() {
     FORMAT Null;"
 
   run_query
-  check_logs_for_new_size_hint
   run_query
-  check_logs_for_no_new_size_hint
-  check_logs_for_preallocate_singlethreaded $expected_size_hint
+  check_preallocated_elements $expected_size_hint
   print_border
 }
 
@@ -30,10 +28,8 @@ test_one_thread_simple_group_by() {
     FORMAT Null;"
 
   run_query
-  check_logs_for_new_size_hint
   run_query
-  check_logs_for_no_new_size_hint
-  check_logs_for_preallocate_singlethreaded $expected_size_hint
+  check_preallocated_elements $expected_size_hint
   print_border
 }
 
@@ -51,10 +47,8 @@ test_one_thread_simple_group_by_with_limit() {
     FORMAT Null;"
 
   run_query
-  check_logs_for_new_size_hint
   run_query
-  check_logs_for_no_new_size_hint
-  check_logs_for_preallocate_singlethreaded $expected_size_hint
+  check_preallocated_elements $expected_size_hint
   print_border
 }
 
@@ -74,10 +68,8 @@ test_several_threads_simple_group_by_with_limit_single_level_ht() {
     FORMAT Null;"
 
   run_query
-  check_logs_for_new_size_hint
   run_query
-  check_logs_for_no_new_size_hint
-  check_logs_for_preallocate_multithreaded $((expected_size_hint / max_threads))
+  check_preallocated_elements $expected_size_hint
   print_border
 }
 
@@ -97,10 +89,8 @@ test_several_threads_simple_group_by_with_limit_two_level_ht() {
     FORMAT Null;"
 
   run_query
-  check_logs_for_new_size_hint
   run_query
-  check_logs_for_no_new_size_hint
-  check_logs_for_convertion_to_two_level
+  check_convertion_to_two_level
   print_border
 }
 
@@ -119,10 +109,8 @@ test_several_threads_simple_group_by_external_aggregation_two_level_ht() {
     FORMAT Null;"
 
   run_query
-  check_logs_for_new_size_hint
   run_query
-  check_logs_for_no_new_size_hint
-  check_logs_for_convertion_to_two_level
+  check_convertion_to_two_level
   print_border
 }
 
@@ -140,9 +128,7 @@ test_several_threads_simple_group_by_in_order_aggregation() {
     FORMAT Null;"
 
   run_query
-  check_logs_for_new_size_hint
   run_query
-  check_logs_for_no_new_size_hint
   # collected sizes are not used for now during in-order aggregation since
   # latter works with each group by key in turn (without storing them in HT)
   # and also statistics isn't used during merging of partially aggregated blocks.
@@ -166,10 +152,8 @@ test_several_threads_simple_group_by_with_limit_and_rollup_single_level_ht() {
        FORMAT Null;"
 
   run_query
-  check_logs_for_new_size_hint
   run_query
-  check_logs_for_no_new_size_hint
-  check_logs_for_preallocate_multithreaded $((expected_size_hint / max_threads))
+  check_preallocated_elements $expected_size_hint
   print_border
 }
 
@@ -190,10 +174,8 @@ test_several_threads_simple_group_by_with_limit_and_rollup_two_level_ht() {
        FORMAT Null;"
 
   run_query
-  check_logs_for_new_size_hint
   run_query
-  check_logs_for_no_new_size_hint
-  check_logs_for_convertion_to_two_level
+  check_convertion_to_two_level
   print_border
 }
 
@@ -214,10 +196,8 @@ test_several_threads_simple_group_by_with_limit_and_cube_single_level_ht() {
      FORMAT Null;"
 
   run_query
-  check_logs_for_new_size_hint
   run_query
-  check_logs_for_no_new_size_hint
-  check_logs_for_preallocate_multithreaded $((expected_size_hint / max_threads))
+  check_preallocated_elements $expected_size_hint
   print_border
 }
 
@@ -238,9 +218,7 @@ test_several_threads_simple_group_by_with_limit_and_cube_two_level_ht() {
      FORMAT Null;"
 
   run_query
-  check_logs_for_new_size_hint
   run_query
-  check_logs_for_no_new_size_hint
-  check_logs_for_convertion_to_two_level
+  check_convertion_to_two_level
   print_border
 }

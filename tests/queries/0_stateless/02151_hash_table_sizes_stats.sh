@@ -43,38 +43,21 @@ run_query() {
      $query"
 }
 
-check_number_of_string_occurrences_satisfies_condition() {
+check_preallocated_elements() {
   $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
-  $CLICKHOUSE_CLIENT                                                                               \
-    --param_query_id="$query_id"                                                                   \
-    -q "WITH (                                                                                     \
-          SELECT COUNT(message)                                                                    \
-            FROM system.text_log                                                                   \
-           WHERE event_date >= yesterday() AND query_id = {query_id:String} AND message ILIKE '$1' \
-        ) AS res                                                                                   \
-        SELECT res $2"
+  $CLICKHOUSE_CLIENT --param_query_id="$query_id" -q "
+    SELECT COUNT(*)
+      FROM system.query_log                                                               
+     WHERE event_date >= yesterday() AND query_id = {query_id:String}
+           AND ProfileEvents['HashTableStatsCachePreallocatedElements'] = $1"
 }
 
-check_logs_for_new_size_hint() {
-  check_number_of_string_occurrences_satisfies_condition "%new size_hint=$expected_size_hint" "= 1"
-}
-
-check_logs_for_no_new_size_hint() {
-  check_number_of_string_occurrences_satisfies_condition "%new size_hint%" "= 0"
-}
-
-check_logs_for_preallocate_singlethreaded() {
-  check_number_of_string_occurrences_satisfies_condition "%preallocate $1 elements%" "= 1"
-}
-
-check_logs_for_preallocate_multithreaded() {
-  # rows may be distributed in any way including "everything goes to the one particular thread"
-  check_number_of_string_occurrences_satisfies_condition "%preallocate $1 elements%" "BETWEEN 1 AND $max_threads"
-}
-
-check_logs_for_convertion_to_two_level() {
-  # rows may be distributed in any way including "everything goes to the one particular thread"
-  check_number_of_string_occurrences_satisfies_condition "%converting % to two-level%" "BETWEEN 1 AND $max_threads"
+check_convertion_to_two_level() {
+  $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
+  $CLICKHOUSE_CLIENT --param_query_id="$query_id" -q "
+    SELECT SUM(ProfileEvents['HashTableStatsCacheConvertedToTwoLevel']) BETWEEN 1 AND $max_threads
+      FROM system.query_log                                                               
+     WHERE event_date >= yesterday() AND query_id = {query_id:String}"
 }
 
 print_border() {
@@ -82,23 +65,10 @@ print_border() {
 }
 
 
-test_aggregation_without_table() {
-  query="
-  -- some odd case, expected no size_hint --
-    SELECT 1 AS number
-  GROUP BY number
-    FORMAT Null;"
-  run_query
-  check_logs_for_no_new_size_hint
-  print_border
-}
-
-
 # shellcheck source=../02151_hash_table_sizes_stats.testcases
 source "$CURDIR"/02151_hash_table_sizes_stats.testcases
 
 
-test_aggregation_without_table
 test_one_thread_no_group_by
 test_one_thread_simple_group_by
 test_one_thread_simple_group_by_with_limit
