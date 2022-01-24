@@ -1370,4 +1370,13 @@ APPLY_FOR_AGGREGATED_VARIANTS(M)
 
 #undef M
 
+
+struct HashTablesCacheStatistics
+{
+    size_t entries = 0;
+    size_t hits = 0;
+    size_t misses = 0;
+};
+
+std::optional<HashTablesCacheStatistics> getHashTablesCacheStatistics();
 }
