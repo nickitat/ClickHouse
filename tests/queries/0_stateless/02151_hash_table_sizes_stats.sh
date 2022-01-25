@@ -48,7 +48,7 @@ check_preallocated_elements() {
   $CLICKHOUSE_CLIENT --param_query_id="$query_id" -q "
     SELECT COUNT(*)
       FROM system.query_log                                                               
-     WHERE event_date >= yesterday() AND query_id = {query_id:String}
+     WHERE event_date >= yesterday() AND query_id = {query_id:String} AND current_database = currentDatabase()
            AND ProfileEvents['HashTableStatsCachePreallocatedElements'] = $1"
 }
 
@@ -57,7 +57,7 @@ check_convertion_to_two_level() {
   $CLICKHOUSE_CLIENT --param_query_id="$query_id" -q "
     SELECT SUM(ProfileEvents['HashTableStatsCacheConvertedToTwoLevel']) BETWEEN 1 AND $max_threads
       FROM system.query_log                                                               
-     WHERE event_date >= yesterday() AND query_id = {query_id:String}"
+     WHERE event_date >= yesterday() AND query_id = {query_id:String} AND current_database = currentDatabase()"
 }
 
 print_border() {
