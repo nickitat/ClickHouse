@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tags: long, distributed
 
-# This tests doesn't use `current_database = currentDatabase()` condition, because database name doesn't propagated during remote queries.
+# These tests don't use `current_database = currentDatabase()` condition, because database name isn't propagated during remote queries.
 
 # shellcheck disable=SC2154
 
