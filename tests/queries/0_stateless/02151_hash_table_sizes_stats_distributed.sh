@@ -60,6 +60,7 @@ check_preallocated_elements() {
 
 check_convertion_to_two_level() {
   $CLICKHOUSE_CLIENT -q "SYSTEM FLUSH LOGS"
+  # rows may be distributed in any way including "everything goes to the one particular thread"
   $CLICKHOUSE_CLIENT --param_query_id="$query_id" -q "
     SELECT SUM(ProfileEvents['HashTableStatsCacheConvertedToTwoLevel']) BETWEEN 1 AND $max_threads
       FROM system.query_log                                                               

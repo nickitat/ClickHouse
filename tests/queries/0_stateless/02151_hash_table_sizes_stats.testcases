@@ -127,8 +127,6 @@ test_several_threads_simple_group_by_in_order_aggregation() {
            optimize_aggregation_in_order = 1
     FORMAT Null;"
 
-  run_query
-  run_query
   # collected sizes are not used for now during in-order aggregation since
   # latter works with each group by key in turn (without storing them in HT)
   # and also statistics isn't used during merging of partially aggregated blocks.
