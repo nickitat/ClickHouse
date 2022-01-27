@@ -385,6 +385,10 @@ for query_index in queries_to_run:
             if run >= args.runs:
                 break
 
+    from numpy import median
+    import sys
+    print(f'{q.split(" ")[3]}_{q[-1]}\t{median(all_server_times[conn_index])}', file=sys.stderr)
+
     client_seconds = time.perf_counter() - start_seconds
     print(f'client-time\t{query_index}\t{client_seconds}\t{server_seconds}')
 

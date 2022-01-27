@@ -1,7 +1,56 @@
 <test>
+    <!--
     <query>WITH toUInt8(number) AS k, toUInt64(k) AS k1, k AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2</query>
     <query>WITH toUInt8(number) AS k, toUInt16(k) AS k1, toUInt32(k) AS k2, k AS k3 SELECT k1, k2, k3, count() FROM numbers(100000000) GROUP BY k1, k2, k3</query>
     <query>WITH toUInt8(number) AS k, k AS k1, k + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2</query>
     <query>WITH toUInt8(number) AS k, k AS k1, k + 1 AS k2, k + 2 AS k3, k + 3 AS k4 SELECT k1, k2, k3, k4, count() FROM numbers(100000000) GROUP BY k1, k2, k3, k4</query>
-    <query>WITH toUInt8(number) AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2</query>
+    -->
+    <query>WITH number % 255 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 255 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 257 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 257 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 511 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 511 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 513 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 513 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 1023 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 1023 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 1025 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 1025 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 2047 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 2047 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 2049 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 2049 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 4095 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 4095 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 4097 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 4097 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 8191 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 8191 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 8193 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 8193 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 16383 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 16383 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 16385 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 16385 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 32767 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 32767 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 32769 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 32769 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 65535 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 65535 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 65537 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 65537 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 131071 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 131071 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 131073 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 131073 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 262143 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 262143 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 262145 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 262145 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 524287 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 524287 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>WITH number % 524289 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>WITH number % 524289 AS k, toUInt64(k) AS k1, k1 + 1 AS k2 SELECT k1, k2, count() FROM numbers(100000000) GROUP BY k1, k2 format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
 </test>

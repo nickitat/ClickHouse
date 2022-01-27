@@ -1,8 +1,16 @@
 <test>
+    <query>SELECT number FROM numbers(1048576) GROUP BY number FORMAT Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>SELECT number FROM numbers(1048576) GROUP BY number FORMAT Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>SELECT number FROM numbers(1048575) GROUP BY number FORMAT Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>SELECT number FROM numbers(1048575) GROUP BY number FORMAT Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <!--<query>SELECT number FROM numbers(5000000) GROUP BY number FORMAT Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>SELECT number FROM numbers(5000000) GROUP BY number FORMAT Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
     <query>SELECT number FROM numbers(10000000) GROUP BY number FORMAT Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
     <query>SELECT number FROM numbers(10000000) GROUP BY number FORMAT Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>SELECT number FROM numbers_mt(100000) GROUP BY number format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
+    <query>SELECT number FROM numbers_mt(100000) GROUP BY number format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
     <query>SELECT number FROM numbers_mt(500000) GROUP BY number format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
-    <query>SELECT number FROM numbers_mt(500000) GROUP BY number format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query short="1">SELECT number FROM numbers_mt(500000) GROUP BY number format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
     <query>SELECT number FROM numbers_mt(1000000) GROUP BY number format Null SETTINGS collect_hash_table_stats_during_aggregation = 0</query>
-    <query>SELECT number FROM numbers_mt(1000000) GROUP BY number format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>
+    <query>SELECT number FROM numbers_mt(1000000) GROUP BY number format Null SETTINGS collect_hash_table_stats_during_aggregation = 1</query>-->
 </test>
