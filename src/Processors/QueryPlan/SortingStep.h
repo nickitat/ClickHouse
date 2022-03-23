@@ -49,6 +49,10 @@ public:
     /// Add limit or change it to lower value.
     void updateLimit(size_t limit_);
 
+    void updateInputStream(DataStream input_stream, Block result_header);
+
+    SortDescription getSortDescription() const { return result_description; }
+
 private:
 
     enum class Type

@@ -88,6 +88,14 @@ SortingStep::SortingStep(
     output_stream->sort_mode = DataStream::SortMode::Stream;
 }
 
+void SortingStep::updateInputStream(DataStream input_stream, Block)
+{
+    // output_stream = createOutputStream(input_stream, result_header, getDataStreamTraits());
+
+    input_streams.clear();
+    input_streams.emplace_back(std::move(input_stream));
+}
+
 void SortingStep::updateLimit(size_t limit_)
 {
     if (limit_ && (limit == 0 || limit_ < limit))
