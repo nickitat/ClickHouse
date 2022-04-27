@@ -177,6 +177,12 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
     }
 }
 
+void AggregatingStep::updateInputStream(DataStream input_stream)
+{
+    input_streams.clear();
+    input_streams.emplace_back(std::move(input_stream));
+}
+
 void AggregatingStep::describeActions(FormatSettings & settings) const
 {
     params.explain(settings.out, settings.offset);

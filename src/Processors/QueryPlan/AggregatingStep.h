@@ -30,6 +30,14 @@ public:
 
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &) override;
 
+    void updateInputStream(DataStream input_stream);
+
+    void updateGroupByInfo(InputOrderInfoPtr group_by_info_, const SortDescription & group_by_sort_description_)
+    {
+        group_by_info = group_by_info_;
+        group_by_sort_description = group_by_sort_description_;
+    }
+
     void describeActions(JSONBuilder::JSONMap & map) const override;
 
     void describeActions(FormatSettings &) const override;

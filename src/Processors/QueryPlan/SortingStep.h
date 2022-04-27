@@ -48,6 +48,7 @@ public:
 
     /// Add limit or change it to lower value.
     void updateLimit(size_t limit_);
+    bool hasLimit() const { return limit; }
 
     void updateInputStream(DataStream input_stream);
     void updateOutputStream(Block result_header);
