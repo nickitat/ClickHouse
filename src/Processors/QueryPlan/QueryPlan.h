@@ -1,8 +1,8 @@
 #pragma once
 
+#include <Columns/IColumn.h>
 #include <Core/Names.h>
 #include <Interpreters/Context_fwd.h>
-#include <Columns/IColumn.h>
 
 #include <list>
 #include <memory>
@@ -103,6 +103,10 @@ public:
     };
 
     using Nodes = std::list<Node>;
+
+    Nodes & getNodes() { return nodes; }
+
+    static QueryPlan cloneSubtree(const Node & node);
 
 private:
     Nodes nodes;

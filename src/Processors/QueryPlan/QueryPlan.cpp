@@ -513,4 +513,18 @@ void QueryPlan::explainEstimate(MutableColumns & columns)
     }
 }
 
+QueryPlan QueryPlan::cloneSubtree(const Node & node)
+{
+    std::function<void(const Node &, QueryPlan & cloned_plan)> dfs = [&](const Node & current, QueryPlan & cloned_plan)
+    {
+        for (const auto & child : current.children)
+            dfs(*child, cloned_plan);
+        cloned_plan.addStep(current.step->clone());
+    };
+
+    QueryPlan cloned_plan;
+    dfs(node, cloned_plan);
+    return cloned_plan;
+}
+
 }

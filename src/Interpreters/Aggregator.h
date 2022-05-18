@@ -899,9 +899,9 @@ public:
 
         /// What to count.
         const ColumnNumbers keys;
-        const AggregateDescriptions aggregates;
+        AggregateDescriptions aggregates;
         const size_t keys_size;
-        const size_t aggregates_size;
+        size_t aggregates_size;
 
         /// The settings of approximate calculation of GROUP BY.
         const bool overflow_row;    /// Do we need to put into AggregatedDataVariants::without_key aggregates for keys that are not in max_rows_to_group_by.

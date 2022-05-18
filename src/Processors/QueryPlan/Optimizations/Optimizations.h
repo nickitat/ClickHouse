@@ -48,15 +48,21 @@ size_t tryPushDownFilter(const QueryPlanOptimizationSettings &, QueryPlan & quer
 /// May split ExpressionStep and lift up only a part of it.
 size_t tryExecuteFunctionsAfterSorting(const QueryPlanOptimizationSettings &, QueryPlan & query_plan, QueryPlan::Node * parent_node);
 
+size_t tryReplaceAggregationWithTwoLevelWhenQueryContainsOrderByAndLimit(
+    const QueryPlanOptimizationSettings & settings, QueryPlan & query_plan, QueryPlan::Node * parent_node);
+
 inline const auto & getOptimizations()
 {
-    static const std::array<Optimization, 6> optimizations = {{
+    static const std::array<Optimization, 7> optimizations = {{
         {tryLiftUpArrayJoin, "liftUpArrayJoin", &QueryPlanOptimizationSettings::optimize_plan},
         {tryPushDownLimit, "pushDownLimit", &QueryPlanOptimizationSettings::optimize_plan},
         {trySplitFilter, "splitFilter", &QueryPlanOptimizationSettings::optimize_plan},
         {tryMergeExpressions, "mergeExpressions", &QueryPlanOptimizationSettings::optimize_plan},
         {tryPushDownFilter, "pushDownFilter", &QueryPlanOptimizationSettings::filter_push_down},
         {tryExecuteFunctionsAfterSorting, "liftUpFunctions", &QueryPlanOptimizationSettings::optimize_plan},
+        {tryReplaceAggregationWithTwoLevelWhenQueryContainsOrderByAndLimit,
+         "twoStepAggregation",
+         &QueryPlanOptimizationSettings::optimize_plan},
     }};
 
     return optimizations;

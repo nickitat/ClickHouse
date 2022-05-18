@@ -54,14 +54,15 @@ public:
     void describeActions(FormatSettings &) const override;
     void describePipeline(FormatSettings & settings) const override;
 
-    const Aggregator::Params & getParams() const { return params; }
+    const Aggregator::Params & getParams() const { return *params; }
+    void setParams(Aggregator::Params params);
+
+    std::unique_ptr<IQueryPlanStep> clone() const override { return std::make_unique<AggregatingStep>(*this); }
 
 private:
     void updateOutputStream() override;
 
-    std::unique_ptr<IQueryPlanStep> clone() const override { return std::make_unique<AggregatingStep>(*this); }
-
-    Aggregator::Params params;
+    std::shared_ptr<Aggregator::Params> params;
     GroupingSetsParamsList grouping_sets_params;
     bool final;
     size_t max_block_size;
