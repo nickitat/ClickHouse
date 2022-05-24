@@ -27,8 +27,10 @@ const DB::DataStream & getChildOutputStream(DB::QueryPlan::Node & node)
 namespace DB::QueryPlanOptimizations
 {
 
-size_t tryExecuteFunctionsAfterSorting(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes)
+size_t tryExecuteFunctionsAfterSorting(const QueryPlanOptimizationSettings &, QueryPlan & plan, QueryPlan::Node * parent_node)
 {
+    auto & nodes = plan.getNodes();
+
     if (parent_node->children.size() != 1)
         return 0;
 

@@ -5,7 +5,7 @@
 namespace DB
 {
 
-QueryPlanOptimizationSettings QueryPlanOptimizationSettings::fromSettings(const Settings & from)
+QueryPlanOptimizationSettings fromSettings(const Settings & from)
 {
     QueryPlanOptimizationSettings settings;
     settings.optimize_plan = from.query_plan_enable_optimizations;
@@ -16,7 +16,9 @@ QueryPlanOptimizationSettings QueryPlanOptimizationSettings::fromSettings(const 
 
 QueryPlanOptimizationSettings QueryPlanOptimizationSettings::fromContext(ContextPtr from)
 {
-    return fromSettings(from->getSettingsRef());
+    auto res = fromSettings(from->getSettingsRef());
+    res.context = from;
+    return res;
 }
 
 }

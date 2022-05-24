@@ -35,7 +35,7 @@ static bool tryUpdateLimitForSortingSteps(QueryPlan::Node * node, size_t limit)
     return updated;
 }
 
-size_t tryPushDownLimit(QueryPlan::Node * parent_node, QueryPlan::Nodes &)
+size_t tryPushDownLimit(const QueryPlanOptimizationSettings &, QueryPlan &, QueryPlan::Node * parent_node)
 {
     if (parent_node->children.size() != 1)
         return 0;

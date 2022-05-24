@@ -93,8 +93,10 @@ static Names getAggregatingKeys(const Aggregator::Params & params)
     return keys;
 }
 
-size_t tryPushDownFilter(QueryPlan::Node * parent_node, QueryPlan::Nodes & nodes)
+size_t tryPushDownFilter(const QueryPlanOptimizationSettings &, QueryPlan & plan, QueryPlan::Node * parent_node)
 {
+    auto & nodes = plan.getNodes();
+
     if (parent_node->children.size() != 1)
         return 0;
 

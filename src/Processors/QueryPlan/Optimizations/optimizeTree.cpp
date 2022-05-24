@@ -10,11 +10,12 @@ namespace ErrorCodes
 {
     extern const int TOO_MANY_QUERY_PLAN_OPTIMIZATIONS;
 }
+}
 
-namespace QueryPlanOptimizations
+namespace DB::QueryPlanOptimizations
 {
 
-void optimizeTree(const QueryPlanOptimizationSettings & settings, QueryPlan::Node & root, QueryPlan::Nodes & nodes)
+void optimizeTree(const QueryPlanOptimizationSettings & settings, QueryPlan & query_plan, QueryPlan::Node & root)
 {
     if (!settings.optimize_plan)
         return;
@@ -50,10 +51,9 @@ void optimizeTree(const QueryPlanOptimizationSettings & settings, QueryPlan::Nod
             /// Traverse all children first.
             if (frame.next_child < frame.node->children.size())
             {
-                stack.push(Frame
-                {
-                       .node = frame.node->children[frame.next_child],
-                       .depth_limit = frame.depth_limit ? (frame.depth_limit - 1) : 0,
+                stack.push(Frame{
+                    .node = frame.node->children[frame.next_child],
+                    .depth_limit = frame.depth_limit ? (frame.depth_limit - 1) : 0,
                 });
 
                 ++frame.next_child;
@@ -74,12 +74,13 @@ void optimizeTree(const QueryPlanOptimizationSettings & settings, QueryPlan::Nod
                 continue;
 
             if (max_optimizations_to_apply && max_optimizations_to_apply < total_applied_optimizations)
-                throw Exception(ErrorCodes::TOO_MANY_QUERY_PLAN_OPTIMIZATIONS,
-                                "Too many optimizations applied to query plan. Current limit {}",
-                                max_optimizations_to_apply);
+                throw Exception(
+                    ErrorCodes::TOO_MANY_QUERY_PLAN_OPTIMIZATIONS,
+                    "Too many optimizations applied to query plan. Current limit {}",
+                    max_optimizations_to_apply);
 
             /// Try to apply optimization.
-            auto update_depth = optimization.apply(frame.node, nodes);
+            auto update_depth = optimization.apply(settings, query_plan, frame.node);
             if (update_depth)
                 ++total_applied_optimizations;
             max_update_depth = std::max<size_t>(max_update_depth, update_depth);
@@ -96,7 +97,5 @@ void optimizeTree(const QueryPlanOptimizationSettings & settings, QueryPlan::Nod
         /// Nothing was applied.
         stack.pop();
     }
-}
-
 }
 }

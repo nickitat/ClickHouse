@@ -7,8 +7,10 @@ namespace DB::QueryPlanOptimizations
 {
 
 /// Split FilterStep into chain `ExpressionStep -> FilterStep`, where FilterStep contains minimal number of nodes.
-size_t trySplitFilter(QueryPlan::Node * node, QueryPlan::Nodes & nodes)
+size_t trySplitFilter(const QueryPlanOptimizationSettings &, QueryPlan & plan, QueryPlan::Node * node)
 {
+    auto & nodes = plan.getNodes();
+
     auto * filter_step = typeid_cast<FilterStep *>(node->step.get());
     if (!filter_step)
         return 0;

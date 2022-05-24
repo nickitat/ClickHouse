@@ -21,7 +21,8 @@ struct QueryPlanOptimizationSettings
     /// If filter push down optimization is enabled.
     bool filter_push_down = true;
 
-    static QueryPlanOptimizationSettings fromSettings(const Settings & from);
+    ContextPtr context;
+
     static QueryPlanOptimizationSettings fromContext(ContextPtr from);
 };
 

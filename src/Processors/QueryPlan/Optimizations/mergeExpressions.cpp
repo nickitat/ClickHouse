@@ -6,7 +6,7 @@
 namespace DB::QueryPlanOptimizations
 {
 
-size_t tryMergeExpressions(QueryPlan::Node * parent_node, QueryPlan::Nodes &)
+size_t tryMergeExpressions(const QueryPlanOptimizationSettings &, QueryPlan &, QueryPlan::Node * parent_node)
 {
     if (parent_node->children.size() != 1)
         return false;
