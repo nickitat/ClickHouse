@@ -16,6 +16,9 @@ class ExpressionStep : public ITransformingStep
 public:
 
     explicit ExpressionStep(const DataStream & input_stream_, ActionsDAGPtr actions_dag_);
+
+    ExpressionStep(const ExpressionStep &) = default;
+
     String getName() const override { return "Expression"; }
 
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings & settings) override;
@@ -28,6 +31,8 @@ public:
 
 private:
     void updateOutputStream() override;
+
+    std::unique_ptr<IQueryPlanStep> clone() const override { return std::make_unique<ExpressionStep>(*this); }
 
     ActionsDAGPtr actions_dag;
 };

@@ -30,11 +30,15 @@ public:
         std::shared_ptr<const EnabledQuota> quota_,
         ContextPtr context_);
 
+    SettingQuotaAndLimitsStep(const SettingQuotaAndLimitsStep &) = default;
+
     String getName() const override { return "SettingQuotaAndLimits"; }
 
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &) override;
 
 private:
+    std::unique_ptr<IQueryPlanStep> clone() const override { return std::make_unique<SettingQuotaAndLimitsStep>(*this); }
+
     ContextPtr context;
     StoragePtr storage;
     TableLockHolder table_lock;

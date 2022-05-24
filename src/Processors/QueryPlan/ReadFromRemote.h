@@ -34,11 +34,15 @@ public:
         Poco::Logger * log_,
         UInt32 shard_count_);
 
+    ReadFromRemote(const ReadFromRemote &) = default;
+
     String getName() const override { return "ReadFromRemote"; }
 
     void initializePipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &) override;
 
 private:
+    std::unique_ptr<IQueryPlanStep> clone() const override { return std::make_unique<ReadFromRemote>(*this); }
+
     enum class Mode
     {
         PerReplica,

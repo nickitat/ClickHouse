@@ -16,6 +16,8 @@ public:
         bool with_ties_ = false, /// Limit with ties.
         SortDescription description_ = {});
 
+    LimitStep(const LimitStep &) = default;
+
     String getName() const override { return "Limit"; }
 
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &) override;
@@ -37,6 +39,8 @@ public:
     bool withTies() const { return with_ties; }
 
 private:
+    std::unique_ptr<IQueryPlanStep> clone() const override { return std::make_unique<LimitStep>(*this); }
+
     size_t limit;
     size_t offset;
     bool always_read_till_end;

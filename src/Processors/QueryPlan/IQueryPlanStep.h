@@ -2,6 +2,7 @@
 #include <Core/Block.h>
 #include <Core/SortDescription.h>
 #include <Processors/QueryPlan/BuildQueryPipelineSettings.h>
+#include "Columns/IColumn.h"
 
 namespace JSONBuilder { class JSONMap; }
 
@@ -111,7 +112,15 @@ public:
     /// Get description of processors added in current step. Should be called after updatePipeline().
     virtual void describePipeline(FormatSettings & /*settings*/) const {}
 
+    virtual std::unique_ptr<IQueryPlanStep> clone() const
+    {
+        throw Exception(ErrorCodes::NOT_IMPLEMENTED, "clone() isn't implemented in derived class");
+    }
+
 protected:
+    IQueryPlanStep() = default;
+    IQueryPlanStep(const IQueryPlanStep &) = default;
+
     DataStreams input_streams;
     std::optional<DataStream> output_stream;
 

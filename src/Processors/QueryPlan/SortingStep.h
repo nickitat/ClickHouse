@@ -39,6 +39,8 @@ public:
         size_t max_block_size_,
         UInt64 limit_ = 0);
 
+    SortingStep(const SortingStep &) = default;
+
     String getName() const override { return "Sorting"; }
 
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &) override;
@@ -53,6 +55,8 @@ public:
 
 private:
     void updateOutputStream() override;
+
+    std::unique_ptr<IQueryPlanStep> clone() const override { return std::make_unique<SortingStep>(*this); }
 
     enum class Type
     {

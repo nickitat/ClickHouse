@@ -100,6 +100,8 @@ public:
         bool enable_parallel_reading
     );
 
+    ReadFromMergeTree(const ReadFromMergeTree &) = default;
+
     static constexpr auto name = "ReadFromMergeTree";
     String getName() const override { return name; }
 
@@ -130,6 +132,8 @@ public:
         Poco::Logger * log);
 
 private:
+    std::unique_ptr<IQueryPlanStep> clone() const override { return std::make_unique<ReadFromMergeTree>(*this); }
+
     const MergeTreeReaderSettings reader_settings;
 
     MergeTreeData::DataPartsVector prepared_parts;

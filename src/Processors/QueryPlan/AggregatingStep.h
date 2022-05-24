@@ -1,8 +1,9 @@
 #pragma once
+#include <memory>
+#include <Interpreters/Aggregator.h>
 #include <Processors/QueryPlan/ITransformingStep.h>
 #include <QueryPipeline/SizeLimits.h>
 #include <Storages/SelectQueryInfo.h>
-#include <Interpreters/Aggregator.h>
 
 namespace DB
 {
@@ -42,6 +43,8 @@ public:
         InputOrderInfoPtr group_by_info_,
         SortDescription group_by_sort_description_);
 
+    AggregatingStep(const AggregatingStep &) = default;
+
     String getName() const override { return "Aggregating"; }
 
     void transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &) override;
@@ -55,6 +58,8 @@ public:
 
 private:
     void updateOutputStream() override;
+
+    std::unique_ptr<IQueryPlanStep> clone() const override { return std::make_unique<AggregatingStep>(*this); }
 
     Aggregator::Params params;
     GroupingSetsParamsList grouping_sets_params;
