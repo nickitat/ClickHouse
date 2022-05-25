@@ -6,4 +6,8 @@ select a from tbl_agg group by a, b order by a limit 5;
 
 select a from tbl_agg group by a, b order by a limit 5 offset 5;
 
+select a, sipHash64(a) from tbl_agg group by a, b order by a limit 5;
+
+select a from tbl_agg group by a, b order by sipHash64(a) limit 5;
+
 drop table tbl_agg;

@@ -31,7 +31,7 @@ SetPtr createSet(ContextPtr context)
     return std::make_shared<Set>(size_limits, /* fill_set_elements */ false, settings.transform_null_in);
 }
 
-bool update(QueryPlan::Node & node)
+bool update(QueryPlan & plan, QueryPlan::Node & node)
 {
     if (auto * step = typeid_cast<AggregatingStep *>(node.step.get()))
     {
@@ -40,30 +40,35 @@ bool update(QueryPlan::Node & node)
         aggregator_params.aggregates_size = 0;
         step->setParams(std::move(aggregator_params));
         step->updateInputStream(node.step->getInputStreams().front());
+
+        if (node.children.size() != 1)
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "");
+
+        auto & child = node.children.front();
+        auto * expression_before_group_by = typeid_cast<ExpressionStep *>(child->step.get());
+        if (!expression_before_group_by)
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "");
+
+        auto & sorting_node = plan.getNodes().back();
+        auto actions = expression_before_group_by->getExpression()->clone();
+        actions->projectInput();
+        plan.addStep(std::make_unique<ExpressionStep>(sorting_node.step->getOutputStream(), std::move(actions)));
+
         return true;
     }
-    if (node.children.empty())
-        return false;
+
     bool agg_found = false;
     for (auto & child : node.children)
-        agg_found |= update(*child);
+        agg_found |= update(plan, *child);
+
     if (agg_found)
     {
-        LOG_DEBUG(&Poco::Logger::get("debug"), "step {}", node.step->getName());
         if (auto * transforming_step = dynamic_cast<ITransformingStep *>(node.step.get()))
             transforming_step->updateInputStream(node.children.front()->step->getOutputStream());
         else
             throw Exception(ErrorCodes::NOT_IMPLEMENTED, "");
-
-        if (auto * expression_step = typeid_cast<ExpressionStep *>(node.step.get()))
-        {
-            ActionsDAGPtr actions = expression_step->getExpression();
-            const auto input_stream = expression_step->getInputStreams().front();
-            const auto description = expression_step->getStepDescription();
-            node.step = std::make_unique<ExpressionStep>(input_stream, std::move(actions));
-            node.step->setStepDescription(description);
-        }
     }
+
     return agg_found;
 }
 
@@ -78,7 +83,7 @@ void addCreatingSetsStep(QueryPlan & plan, QueryPlan subquery_plan, SetPtr set, 
 void addSubqueryWithPreaggregation(QueryPlan & plan, const QueryPlan::Node & root, SetPtr set, ContextPtr context)
 {
     auto cloned_plan = plan.cloneSubtree(root);
-    update(cloned_plan.getNodes().back());
+    update(cloned_plan, cloned_plan.getNodes().back());
     ::addCreatingSetsStep(plan, std::move(cloned_plan), set, context);
 }
 
@@ -140,9 +145,14 @@ buildFilterStep(DataStream input_stream, const Aggregator::Params & aggregator_p
 
 bool orderByKeysContainAggregates(const SortDescription & sort_description, const Aggregator::Params & aggregator_params)
 {
+    const auto & aggregates = aggregator_params.aggregates;
     for (const auto & col : sort_description)
-        if (!aggregator_params.src_header.findByName(col.column_name))
+    {
+        const auto it
+            = std::find_if(aggregates.begin(), aggregates.end(), [&](const auto & value) { return value.column_name == col.column_name; });
+        if (it != aggregator_params.aggregates.end())
             return true;
+    }
     return false;
 }
 }
@@ -158,11 +168,9 @@ namespace DB::QueryPlanOptimizations
 {
 
 // todo:
-// * support having
-// * do not preallocate in outer query
-// * in theory, outer reading may be more efficient if we filter by in()
-// * should it work with distributed aggregation ?
-// * what if some functions applied to the table columns ?
+// * support having (requires Matcher)
+// * enable this optimization for distributed aggregation (requires Matcher)
+// * enable this optimization if one of the OB keys is f(col)
 size_t tryReplaceAggregationWithTwoLevelWhenQueryContainsOrderByAndLimit(
     const QueryPlanOptimizationSettings & settings, QueryPlan & plan, QueryPlan::Node * parent_node)
 {
@@ -181,7 +189,7 @@ size_t tryReplaceAggregationWithTwoLevelWhenQueryContainsOrderByAndLimit(
 
     auto & parent_step = parent_node->step;
     auto & grand_child_step = grand_child->step;
-    auto * sorting_step = typeid_cast<SortingStep *>(parent_step.get());
+    const auto * sorting_step = typeid_cast<const SortingStep *>(parent_step.get());
     auto * aggregating_step = typeid_cast<AggregatingStep *>(grand_child_step.get());
 
     // Optimization has no sense if query doesn't contain a limit
@@ -201,11 +209,19 @@ size_t tryReplaceAggregationWithTwoLevelWhenQueryContainsOrderByAndLimit(
     auto & filter_by_set_node = plan.getNodes().emplace_back();
     filter_by_set_node.step = buildFilterStep(aggregating_step->getInputStreams().front(), aggregating_step->getParams(), set, context);
 
+    // New FilterStep should be placed right before AggregatingStep.
+    // It is important if one of the group by keys is f(col) (then there will be an ExpressionStep calculating f() before new FilterStep).
+
     // Aggregating -> ...
     std::swap(filter_by_set_node.children, grand_child->children);
     grand_child->children = {&filter_by_set_node};
     aggregating_step->updateInputStream(filter_by_set_node.step->getOutputStream());
     // Aggregating -> Filter -> ...
+
+    // Finally, disable preallocation for hash tables in the outer query
+    auto aggregator_params = aggregating_step->getParams();
+    aggregator_params.stats_collecting_params.disable();
+    aggregating_step->setParams(std::move(aggregator_params));
 
     return 0;
 }
