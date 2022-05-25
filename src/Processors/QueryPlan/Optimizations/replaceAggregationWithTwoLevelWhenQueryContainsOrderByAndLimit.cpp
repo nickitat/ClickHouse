@@ -158,7 +158,6 @@ namespace DB::QueryPlanOptimizations
 {
 
 // todo:
-// * drop offset (whole limit step in outer plan)
 // * support having
 // * do not preallocate in outer query
 // * in theory, outer reading may be more efficient if we filter by in()
@@ -185,7 +184,8 @@ size_t tryReplaceAggregationWithTwoLevelWhenQueryContainsOrderByAndLimit(
     auto * sorting_step = typeid_cast<SortingStep *>(parent_step.get());
     auto * aggregating_step = typeid_cast<AggregatingStep *>(grand_child_step.get());
 
-    if (!sorting_step || !aggregating_step)
+    // Optimization has no sense if query doesn't contain a limit
+    if (!sorting_step || !aggregating_step || !sorting_step->hasLimit())
         return 0;
 
     if (orderByKeysContainAggregates(sorting_step->getSortDescription(), aggregating_step->getParams()))

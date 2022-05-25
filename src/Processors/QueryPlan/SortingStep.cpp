@@ -105,6 +105,11 @@ void SortingStep::updateLimit(size_t limit_)
     }
 }
 
+bool SortingStep::hasLimit() const
+{
+    return limit != 0;
+}
+
 void SortingStep::transformPipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &)
 {
     if (type == Type::FinishSorting)

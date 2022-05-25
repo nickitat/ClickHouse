@@ -50,6 +50,7 @@ public:
 
     /// Add limit or change it to lower value.
     void updateLimit(size_t limit_);
+    bool hasLimit() const;
 
     SortDescription getSortDescription() const { return result_description; }
 
