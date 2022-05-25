@@ -1,0 +1,25 @@
+<test>
+    <settings>
+        <max_memory_usage>30000000000</max_memory_usage>
+    </settings>
+
+    <substitutions>
+        <substitution>
+            <name>value</name>
+            <values>
+                <value>1</value>
+                <value>10</value>
+                <value>100</value>
+            </values>
+        </substitution>
+    </substitutions>
+
+    <create_query>create table tbl_agg_50m_{value}_duplicates(a UInt64, b UInt64) engine MergeTree order by (a, b)</create_query>
+
+    <fill_query>insert into tbl_agg_50m_{value}_duplicates select intDiv(number, {value}), intDiv(number, {value}) from numbers_mt(5e7)</fill_query>
+
+    <query>select a, b, uniq(a), uniq(b) from tbl_agg_50m_{value}_duplicates group by a, b order by a limit 105 format Null</query>
+    <query>select a, b, uniq(a), uniq(b) from tbl_agg_50m_{value}_duplicates group by a, b order by sipHash64(a), sipHash64(b) limit 105 format Null</query>
+
+    <drop_query>drop table if exists tbl_agg_50m_{value}_duplicates</drop_query>
+</test>
