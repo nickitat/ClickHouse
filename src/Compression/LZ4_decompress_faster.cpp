@@ -506,7 +506,9 @@ bool NO_INLINE decompressImpl(const char * const source, char * const dest, size
 
         /// Get literal length.
 
-        if (unlikely(ip >= input_end))
+        constexpr size_t upper_bound_for_small_lenghts = 14;
+        static_assert(upper_bound_for_small_lenghts <= ADDITIONAL_BYTES_AT_END_OF_BUFFER);
+        if (unlikely(ip >= input_end) || unlikely(op >= output_end + ADDITIONAL_BYTES_AT_END_OF_BUFFER - upper_bound_for_small_lenghts))
             return false;
 
         const unsigned token = *ip++;
@@ -527,7 +529,28 @@ bool NO_INLINE decompressImpl(const char * const source, char * const dest, size
         {
             if (unlikely(ip + 1 >= input_end))
                 return false;
+
             continue_read_length();
+
+            if (unlikely(op + length > output_end))
+                return false;
+
+            // Due to implementation specifics the copy length is always a multiple of copy_amount
+            real_length = 0;
+
+            static_assert(copy_amount == 8 || copy_amount == 16 || copy_amount == 32);
+            if constexpr (copy_amount == 8)
+                real_length = (((length >> 3) + 1) * 8);
+            else if constexpr (copy_amount == 16)
+                real_length = (((length >> 4) + 1) * 16);
+            else if constexpr (copy_amount == 32)
+                real_length = (((length >> 5) + 1) * 32);
+
+            if (unlikely(ip + real_length >= input_end + ADDITIONAL_BYTES_AT_END_OF_BUFFER))
+                return false;
+
+            if (unlikely(op + length != output_end && ip + length + 1 >= input_end))
+                return false;
         }
 
         /// Copy literals.
@@ -545,23 +568,6 @@ bool NO_INLINE decompressImpl(const char * const source, char * const dest, size
         /// output: xyzHello, w
         ///                  ^-op (we will overwrite excessive bytes on next iteration)
 
-        if (unlikely(copy_end > output_end))
-            return false;
-
-        // Due to implementation specifics the copy length is always a multiple of copy_amount
-        real_length = 0;
-
-        static_assert(copy_amount == 8 || copy_amount == 16 || copy_amount == 32);
-        if constexpr (copy_amount == 8)
-            real_length = (((length >> 3) + 1) * 8);
-        else if constexpr (copy_amount == 16)
-            real_length = (((length >> 4) + 1) * 16);
-        else if constexpr (copy_amount == 32)
-            real_length = (((length >> 5) + 1) * 32);
-
-        if (unlikely(ip + real_length >= input_end + ADDITIONAL_BYTES_AT_END_OF_BUFFER))
-            return false;
-
         wildCopy<copy_amount>(op, ip, copy_end); /// Here we can write up to copy_amount - 1 bytes after buffer.
 
         if (copy_end == output_end)
@@ -571,9 +577,6 @@ bool NO_INLINE decompressImpl(const char * const source, char * const dest, size
         op = copy_end;
 
     decompress_match:
-
-        if (unlikely(ip + 1 >= input_end))
-            return false;
 
         /// Get match offset.
 
