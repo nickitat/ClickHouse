@@ -1,18 +1,34 @@
-#include <Interpreters/ClusterProxy/executeQuery.h>
-#include <Interpreters/ClusterProxy/SelectStreamFactory.h>
+#include <Core/QueryProcessingStage.h>
 #include <Core/Settings.h>
-#include <Interpreters/Context.h>
+#include <DataTypes/DataTypesNumber.h>
 #include <Interpreters/Cluster.h>
+#include <Interpreters/ClusterProxy/SelectStreamFactory.h>
+#include <Interpreters/ClusterProxy/executeQuery.h>
+#include <Interpreters/Context.h>
 #include <Interpreters/IInterpreter.h>
-#include <Interpreters/ProcessList.h>
+#include <Interpreters/InterpreterSelectQuery.h>
 #include <Interpreters/OptimizeShardingKeyRewriteInVisitor.h>
-#include <QueryPipeline/Pipe.h>
+#include <Interpreters/ProcessList.h>
 #include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/QueryPlan/ReadFromRemote.h>
 #include <Processors/QueryPlan/UnionStep.h>
+#include <QueryPipeline/Pipe.h>
 #include <Storages/SelectQueryInfo.h>
-#include <DataTypes/DataTypesNumber.h>
 
+using namespace DB;
+
+namespace
+{
+
+std::pair<SortDescription, DataStream::SortMode>
+getOutputStreamSortingProperties(ASTPtr query_ast, ContextPtr context, QueryProcessingStage::Enum processed_stage)
+{
+    auto plan = std::make_unique<QueryPlan>();
+    auto interpreter = InterpreterSelectQuery(query_ast, context, SelectQueryOptions(processed_stage).ignoreASTOptimizations());
+    interpreter.buildQueryPlan(*plan);
+    return {plan->getCurrentDataStream().sort_description, plan->getCurrentDataStream().sort_mode};
+}
+}
 
 namespace DB
 {
@@ -175,6 +191,19 @@ void executeQuery(
             "_shard_count", Block{{DataTypeUInt32().createColumnConst(1, shards), std::make_shared<DataTypeUInt32>(), "_shard_count"}});
         auto external_tables = context->getExternalTables();
 
+        /// We determine output stream sort properties by building a local plan (local because otherwise table could be unknown).
+        /// If no local shard exist for this cluster, no sort properties will be provided, c'est la vie.
+        SortDescription sort_description;
+        DataStream::SortMode sort_mode;
+        for (const auto & shard_info : query_info.getCluster()->getShardsInfo())
+        {
+            if (shard_info.isLocal())
+            {
+                std::tie(sort_description, sort_mode) = getOutputStreamSortingProperties(query_ast, new_context, processed_stage);
+                break;
+            }
+        }
+
         auto plan = std::make_unique<QueryPlan>();
         auto read_from_remote = std::make_unique<ReadFromRemote>(
             std::move(remote_shards),
@@ -188,7 +217,9 @@ void executeQuery(
             std::move(external_tables),
             log,
             shards,
-            query_info.storage_limits);
+            query_info.storage_limits,
+            sort_description,
+            sort_mode);
 
         read_from_remote->setStepDescription("Read from remote replica");
         plan->addStep(std::move(read_from_remote));

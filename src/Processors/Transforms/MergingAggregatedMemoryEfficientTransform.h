@@ -142,6 +142,7 @@ struct ChunksToMerge : public ChunkInfo
     std::unique_ptr<Chunks> chunks;
     Int32 bucket_num = -1;
     bool is_overflows = false;
+    UInt64 chunk_num = 0;
 };
 
 class Pipe;

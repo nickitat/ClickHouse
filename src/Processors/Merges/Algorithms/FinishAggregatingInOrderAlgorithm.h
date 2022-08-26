@@ -69,7 +69,7 @@ private:
         /// Number of bytes in all columns + number of bytes in arena, related to current chunk.
         size_t total_bytes = 0;
 
-        State(const Chunk & chunk, const SortDescriptionWithPositions & description, Int64 total_bytes_);
+        State(const Chunk & chunk, const SortDescriptionWithPositions & description, size_t total_bytes_);
         State() = default;
 
         bool isValid() const { return current_row < num_rows; }
@@ -88,6 +88,7 @@ private:
     std::vector<size_t> inputs_to_update;
 
     std::vector<Chunk> chunks;
+    UInt64 chunk_num = 0;
     size_t accumulated_rows = 0;
     size_t accumulated_bytes = 0;
 };

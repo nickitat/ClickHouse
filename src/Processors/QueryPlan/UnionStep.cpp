@@ -1,8 +1,9 @@
+#include <type_traits>
+#include <Interpreters/ExpressionActions.h>
 #include <Processors/QueryPlan/UnionStep.h>
-#include <QueryPipeline/QueryPipelineBuilder.h>
 #include <Processors/Sources/NullSource.h>
 #include <Processors/Transforms/ExpressionTransform.h>
-#include <Interpreters/ExpressionActions.h>
+#include <QueryPipeline/QueryPipelineBuilder.h>
 #include <base/defines.h>
 
 namespace DB
@@ -35,6 +36,22 @@ UnionStep::UnionStep(DataStreams input_streams_, size_t max_threads_)
         output_stream = input_streams.front();
     else
         output_stream = DataStream{.header = header};
+
+    SortDescription common_sort_description = input_streams.front().sort_description;
+    DataStream::SortMode sort_mode = input_streams.front().sort_mode;
+    for (const auto & input_stream : input_streams)
+    {
+        common_sort_description = commonPrefix(common_sort_description, input_stream.sort_description);
+        sort_mode = std::min(sort_mode, input_stream.sort_mode);
+    }
+    if (!common_sort_description.empty() && sort_mode >= DataStream::SortMode::Chunk)
+    {
+        output_stream->sort_description = common_sort_description;
+        if (sort_mode == DataStream::SortMode::Stream && input_streams.size() > 1)
+            output_stream->sort_mode = DataStream::SortMode::Port;
+        else
+            output_stream->sort_mode = sort_mode;
+    }
 }
 
 QueryPipelineBuilderPtr UnionStep::updatePipeline(QueryPipelineBuilders pipelines, const BuildQueryPipelineSettings &)
