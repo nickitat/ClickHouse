@@ -11,6 +11,12 @@
 namespace DB
 {
 
+namespace ErrorCodes
+{
+    extern const int LOGICAL_ERROR;
+}
+
+
 /// Has several inputs and single output.
 /// Read from inputs merged buckets with aggregated data, sort them by bucket number and block number.
 /// Presumption: inputs return chunks with increasing bucket and block number, there is at most one chunk with the given bucket and block number.

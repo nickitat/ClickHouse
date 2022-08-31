@@ -2421,7 +2421,7 @@ void InterpreterSelectQuery::executeAggregation(QueryPlan & query_plan, const Ac
     size_t aggregation_in_order_max_block_bytes = settings.aggregation_in_order_max_block_bytes;
     if (settings.enable_memory_bound_merging_of_aggregation_results)
     {
-        if (context->isDistributed())
+        if (context->isDistributed() && query_info.getCluster() && query_info.getCluster()->getShardCount())
             aggregation_in_order_max_block_bytes /= query_info.getCluster()->getShardCount();
         // todo: handle parallel replicas case
         // else if (settings.allow_experimental_parallel_reading_from_replicas && settings.parallel_replicas_count > 1)
@@ -2488,7 +2488,8 @@ void InterpreterSelectQuery::executeMergeAggregated(QueryPlan & query_plan, bool
         return;
 
     /// Used to determine if we should use memory bound merging strategy.
-    SortDescription group_by_sort_description = getSortDescriptionFromGroupBy(getSelectQuery());
+    auto group_by_sort_description
+        = !query_analyzer->useGroupingSetKey() ? getSortDescriptionFromGroupBy(getSelectQuery()) : SortDescription{};
 
     const bool precedes_merging = options.to_stage == QueryProcessingStage::WithMergeableState;
 
