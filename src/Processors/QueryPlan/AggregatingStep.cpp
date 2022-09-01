@@ -345,10 +345,10 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
             /// Do merge of aggregated data in parallel.
             pipeline.resize(merge_threads);
 
-            pipeline.addSimpleTransform([&](const Block &)
-            {
-                return std::make_shared<MergingAggregatedBucketTransform>(transform_params);
-            });
+            const auto & required_sort_description = memoryBoundMergingWillBeUsed() ? group_by_sort_description : SortDescription{};
+            pipeline.addSimpleTransform(
+                [&](const Block &)
+                { return std::make_shared<MergingAggregatedBucketTransform>(transform_params, required_sort_description); });
 
             if (memoryBoundMergingWillBeUsed())
             {

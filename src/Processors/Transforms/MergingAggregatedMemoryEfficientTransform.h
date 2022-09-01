@@ -1,9 +1,10 @@
 #pragma once
-#include <Processors/IProcessor.h>
+#include <Core/SortDescription.h>
 #include <Interpreters/Aggregator.h>
+#include <Processors/IProcessor.h>
 #include <Processors/ISimpleTransform.h>
-#include <Processors/Transforms/AggregatingTransform.h>
 #include <Processors/ResizeProcessor.h>
+#include <Processors/Transforms/AggregatingTransform.h>
 
 
 namespace DB
@@ -105,7 +106,8 @@ private:
 class MergingAggregatedBucketTransform : public ISimpleTransform
 {
 public:
-    explicit MergingAggregatedBucketTransform(AggregatingTransformParamsPtr params);
+    explicit MergingAggregatedBucketTransform(
+        AggregatingTransformParamsPtr params, const SortDescription & required_sort_description_ = {});
     String getName() const override { return "MergingAggregatedBucketTransform"; }
 
 protected:
@@ -113,6 +115,7 @@ protected:
 
 private:
     AggregatingTransformParamsPtr params;
+    const SortDescription required_sort_description;
 };
 
 /// Has several inputs and single output.

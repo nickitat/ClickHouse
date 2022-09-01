@@ -150,12 +150,7 @@ private:
             current_chunk_id.bucket_id,
             current_chunk_id.chunk_num);
 
-        auto block = header.cloneWithColumns(it->second.detachColumns());
-        // better to move sorting in merging transforms to distribute sorting overhead across many threads
-        sortBlock(block, group_by_sort_description);
-        auto res = convertToChunk(block);
-
-        output.push(std::move(res));
+        output.push(std::move(it->second));
         chunks.erase(it);
         return true;
     }

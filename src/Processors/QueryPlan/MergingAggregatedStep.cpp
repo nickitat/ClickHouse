@@ -79,7 +79,9 @@ void MergingAggregatedStep::transformPipeline(QueryPipelineBuilder & pipeline, c
         /// Do merge of aggregated data in parallel.
         pipeline.resize(max_threads);
 
-        pipeline.addSimpleTransform([&](const Block &) { return std::make_shared<MergingAggregatedBucketTransform>(transform_params); });
+        const auto & required_sort_description = precedes_merging ? group_by_sort_description : SortDescription{};
+        pipeline.addSimpleTransform(
+            [&](const Block &) { return std::make_shared<MergingAggregatedBucketTransform>(transform_params, required_sort_description); });
 
         if (precedes_merging)
         {

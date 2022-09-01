@@ -14,7 +14,7 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-FinishAggregatingInOrderAlgorithm::State::State(const Chunk & chunk, const SortDescriptionWithPositions & desc, size_t total_bytes_)
+FinishAggregatingInOrderAlgorithm::State::State(const Chunk & chunk, const SortDescriptionWithPositions & desc, Int64 total_bytes_)
     : all_columns(chunk.getColumns()), num_rows(chunk.getNumRows()), total_bytes(total_bytes_)
 {
     if (!chunk)
@@ -55,7 +55,7 @@ void FinishAggregatingInOrderAlgorithm::consume(Input & input, size_t source_num
     if (!info)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Chunk info was not set for chunk in FinishAggregatingInOrderAlgorithm");
 
-    size_t allocated_bytes = 0;
+    Int64 allocated_bytes = 0;
     /// Will be set by AggregatingInOrderTransform during local aggregation; will be nullptr during merging on initiator.
     if (const auto * arenas_info = typeid_cast<const ChunkInfoWithAllocatedBytes *>(info.get()))
         allocated_bytes = arenas_info->allocated_bytes;

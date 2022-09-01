@@ -21,12 +21,15 @@ namespace
 {
 
 std::pair<SortDescription, DataStream::SortMode>
-getOutputStreamSortingProperties(ASTPtr query_ast, ContextPtr context, QueryProcessingStage::Enum processed_stage)
+getOutputStreamSortingProperties(ASTPtr query_ast, ContextPtr context, QueryProcessingStage::Enum processed_stage, size_t shard_count)
 {
     auto plan = std::make_unique<QueryPlan>();
     auto interpreter = InterpreterSelectQuery(query_ast, context, SelectQueryOptions(processed_stage).ignoreASTOptimizations());
     interpreter.buildQueryPlan(*plan);
-    return {plan->getCurrentDataStream().sort_description, plan->getCurrentDataStream().sort_mode};
+    auto sort_mode = plan->getCurrentDataStream().sort_mode;
+    if (sort_mode == DataStream::SortMode::Stream && shard_count > 1)
+        sort_mode = DataStream::SortMode::Port;
+    return {plan->getCurrentDataStream().sort_description, sort_mode};
 }
 }
 
@@ -199,7 +202,8 @@ void executeQuery(
         {
             if (shard_info.isLocal())
             {
-                std::tie(sort_description, sort_mode) = getOutputStreamSortingProperties(query_ast, new_context, processed_stage);
+                std::tie(sort_description, sort_mode)
+                    = getOutputStreamSortingProperties(query_ast, new_context, processed_stage, remote_shards.size());
                 break;
             }
         }
