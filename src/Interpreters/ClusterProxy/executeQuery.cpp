@@ -197,7 +197,7 @@ void executeQuery(
         /// We determine output stream sort properties by building a local plan (local because otherwise table could be unknown).
         /// If no local shard exist for this cluster, no sort properties will be provided, c'est la vie.
         SortDescription sort_description;
-        DataStream::SortMode sort_mode;
+        DataStream::SortMode sort_mode = DataStream::SortMode::None;
         for (const auto & shard_info : query_info.getCluster()->getShardsInfo())
         {
             if (shard_info.isLocal())
