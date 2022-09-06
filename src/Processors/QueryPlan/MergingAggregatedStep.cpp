@@ -56,7 +56,7 @@ MergingAggregatedStep::MergingAggregatedStep(
     if (memoryBoundMergingWillBeUsed() && precedes_merging)
     {
         output_stream->sort_description = group_by_sort_description;
-        output_stream->sort_mode = DataStream::SortMode::Stream;
+        output_stream->sort_scope = DataStream::SortScope::Global;
     }
 }
 
@@ -136,6 +136,6 @@ bool MergingAggregatedStep::memoryBoundMergingWillBeUsed() const
 {
     const auto & input_stream = input_streams.front();
     return memory_bound_merging_of_aggregation_results_enabled && !group_by_sort_description.empty()
-        && input_stream.sort_mode >= DataStream::SortMode::Port && input_stream.sort_description.hasPrefix(group_by_sort_description);
+        && input_stream.sort_scope >= DataStream::SortScope::Stream && input_stream.sort_description.hasPrefix(group_by_sort_description);
 }
 }

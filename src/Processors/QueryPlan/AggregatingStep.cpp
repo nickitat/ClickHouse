@@ -90,7 +90,7 @@ AggregatingStep::AggregatingStep(
     InputOrderInfoPtr group_by_info_,
     SortDescription group_by_sort_description_,
     bool precedes_merging_,
-    bool distributed_aggregation_memory_efficient_,
+    bool should_produce_results_in_order_of_bucket_number_,
     bool memory_bound_merging_of_aggregation_results_enabled_)
     : ITransformingStep(
         input_stream_,
@@ -109,13 +109,13 @@ AggregatingStep::AggregatingStep(
     , group_by_info(std::move(group_by_info_))
     , group_by_sort_description(std::move(group_by_sort_description_))
     , precedes_merging(precedes_merging_)
-    , distributed_aggregation_memory_efficient(distributed_aggregation_memory_efficient_)
+    , should_produce_results_in_order_of_bucket_number(should_produce_results_in_order_of_bucket_number_)
     , memory_bound_merging_of_aggregation_results_enabled(memory_bound_merging_of_aggregation_results_enabled_)
 {
     if (memoryBoundMergingWillBeUsed())
     {
         output_stream->sort_description = group_by_sort_description;
-        output_stream->sort_mode = DataStream::SortMode::Stream;
+        output_stream->sort_scope = DataStream::SortScope::Global;
     }
 }
 
@@ -395,7 +395,7 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
             return std::make_shared<AggregatingTransform>(header, transform_params, many_data, counter++, merge_threads, temporary_data_merge_threads);
         });
 
-        pipeline.resize(precedes_merging && distributed_aggregation_memory_efficient ? 1 : params.max_threads, true /* force */);
+        pipeline.resize(precedes_merging && should_produce_results_in_order_of_bucket_number ? 1 : params.max_threads, true /* force */);
 
         aggregating = collector.detachProcessors(0);
     }
@@ -403,7 +403,7 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
     {
         pipeline.addSimpleTransform([&](const Block & header) { return std::make_shared<AggregatingTransform>(header, transform_params); });
 
-        pipeline.resize(should_produce_results_in_order_of_bucket_number ? 1 : params.max_threads, false /* force */);
+        pipeline.resize(precedes_merging && should_produce_results_in_order_of_bucket_number ? 1 : params.max_threads, false /* force */);
 
         aggregating = collector.detachProcessors(0);
     }

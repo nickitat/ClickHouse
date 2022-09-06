@@ -40,7 +40,7 @@ public:
         InputOrderInfoPtr group_by_info_,
         SortDescription group_by_sort_description_,
         bool precedes_merging_,
-        bool distributed_aggregation_memory_efficient_,
+        bool should_produce_results_in_order_of_bucket_number_,
         bool memory_bound_merging_of_aggregation_results_enabled_);
 
     String getName() const override { return "Aggregating"; }
@@ -76,7 +76,7 @@ private:
     /// It determines if we should resize pipeline to 1 at the end.
     const bool precedes_merging;
 
-    bool distributed_aggregation_memory_efficient;
+    bool should_produce_results_in_order_of_bucket_number;
     bool memory_bound_merging_of_aggregation_results_enabled;
 
     Processors aggregating_in_order;

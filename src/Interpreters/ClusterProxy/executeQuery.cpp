@@ -20,16 +20,16 @@ using namespace DB;
 namespace
 {
 
-std::pair<SortDescription, DataStream::SortMode>
+std::pair<SortDescription, DataStream::SortScope>
 getOutputStreamSortingProperties(ASTPtr query_ast, ContextPtr context, QueryProcessingStage::Enum processed_stage, size_t shard_count)
 {
     auto plan = std::make_unique<QueryPlan>();
     auto interpreter = InterpreterSelectQuery(query_ast, context, SelectQueryOptions(processed_stage).ignoreASTOptimizations());
     interpreter.buildQueryPlan(*plan);
-    auto sort_mode = plan->getCurrentDataStream().sort_mode;
-    if (sort_mode == DataStream::SortMode::Stream && shard_count > 1)
-        sort_mode = DataStream::SortMode::Port;
-    return {plan->getCurrentDataStream().sort_description, sort_mode};
+    auto sort_scope = plan->getCurrentDataStream().sort_scope;
+    if (sort_scope == DataStream::SortScope::Global && shard_count > 1)
+        sort_scope = DataStream::SortScope::Stream;
+    return {plan->getCurrentDataStream().sort_description, sort_scope};
 }
 }
 
@@ -197,12 +197,12 @@ void executeQuery(
         /// We determine output stream sort properties by building a local plan (local because otherwise table could be unknown).
         /// If no local shard exist for this cluster, no sort properties will be provided, c'est la vie.
         SortDescription sort_description;
-        DataStream::SortMode sort_mode = DataStream::SortMode::None;
+        DataStream::SortScope sort_scope = DataStream::SortScope::None;
         for (const auto & shard_info : query_info.getCluster()->getShardsInfo())
         {
             if (shard_info.isLocal())
             {
-                std::tie(sort_description, sort_mode)
+                std::tie(sort_description, sort_scope)
                     = getOutputStreamSortingProperties(query_ast, new_context, processed_stage, remote_shards.size());
                 break;
             }
@@ -223,7 +223,7 @@ void executeQuery(
             shards,
             query_info.storage_limits,
             sort_description,
-            sort_mode);
+            sort_scope);
 
         read_from_remote->setStepDescription("Read from remote replica");
         plan->addStep(std::move(read_from_remote));

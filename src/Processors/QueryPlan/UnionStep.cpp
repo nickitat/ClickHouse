@@ -38,19 +38,19 @@ UnionStep::UnionStep(DataStreams input_streams_, size_t max_threads_)
         output_stream = DataStream{.header = header};
 
     SortDescription common_sort_description = input_streams.front().sort_description;
-    DataStream::SortMode sort_mode = input_streams.front().sort_mode;
+    DataStream::SortScope sort_scope = input_streams.front().sort_scope;
     for (const auto & input_stream : input_streams)
     {
         common_sort_description = commonPrefix(common_sort_description, input_stream.sort_description);
-        sort_mode = std::min(sort_mode, input_stream.sort_mode);
+        sort_scope = std::min(sort_scope, input_stream.sort_scope);
     }
-    if (!common_sort_description.empty() && sort_mode >= DataStream::SortMode::Chunk)
+    if (!common_sort_description.empty() && sort_scope >= DataStream::SortScope::Chunk)
     {
         output_stream->sort_description = common_sort_description;
-        if (sort_mode == DataStream::SortMode::Stream && input_streams.size() > 1)
-            output_stream->sort_mode = DataStream::SortMode::Port;
+        if (sort_scope == DataStream::SortScope::Global && input_streams.size() > 1)
+            output_stream->sort_scope = DataStream::SortScope::Stream;
         else
-            output_stream->sort_mode = sort_mode;
+            output_stream->sort_scope = sort_scope;
     }
 }
 
