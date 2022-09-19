@@ -26,4 +26,23 @@ select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group b
 set aggregation_in_order_max_block_bytes = '1Mi';
 set max_block_size = 50000;
 -- actual block size might be slightly bigger than the limit --
-select max(bs) < 70000 from (select avg(a), max(blockSize()) as bs from remote(test_cluster_two_shards, currentDatabase(), t) group by a)
+select max(bs) < 70000 from (select avg(a), max(blockSize()) as bs from remote(test_cluster_two_shards, currentDatabase(), t) group by a);
+
+-- beautiful case when we have different sorting key definitions in tables involved in distributed query => different plans => different sorting properties of local aggregation results --
+create database if not exists shard_1;
+create table t_different_dbs(a UInt64) engine = MergeTree order by a;
+create table shard_1.t_different_dbs(a UInt64) engine = MergeTree order by tuple();
+
+insert into t_different_dbs select * from numbers_mt(1e6);
+insert into shard_1.t_different_dbs select * from numbers_mt(1e6);
+
+create table dist_t_different_dbs as t engine = Distributed(test_cluster_two_shards_different_databases_with_local, '', t_different_dbs);
+
+-- { echoOn } --
+explain pipeline select a, count() from dist_t_different_dbs group by a order by a limit 5 offset 100500;
+
+select a, count() from dist_t_different_dbs group by a order by a limit 5 offset 100500;
+
+-- { echoOff } --
+
+drop database shard_1;

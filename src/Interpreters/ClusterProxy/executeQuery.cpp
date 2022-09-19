@@ -15,23 +15,8 @@
 #include <QueryPipeline/Pipe.h>
 #include <Storages/SelectQueryInfo.h>
 
-using namespace DB;
-
-namespace
-{
-
-std::pair<SortDescription, DataStream::SortScope>
-getOutputStreamSortingProperties(ASTPtr query_ast, ContextPtr context, QueryProcessingStage::Enum processed_stage, size_t shard_count)
-{
-    auto plan = std::make_unique<QueryPlan>();
-    auto interpreter = InterpreterSelectQuery(query_ast, context, SelectQueryOptions(processed_stage).ignoreASTOptimizations());
-    interpreter.buildQueryPlan(*plan);
-    auto sort_scope = plan->getCurrentDataStream().sort_scope;
-    if (sort_scope == DataStream::SortScope::Global && shard_count > 1)
-        sort_scope = DataStream::SortScope::Stream;
-    return {plan->getCurrentDataStream().sort_description, sort_scope};
-}
-}
+#include <Processors/QueryPlan/AggregatingStep.h>
+#include <Processors/QueryPlan/MergingAggregatedStep.h>
 
 namespace DB
 {
@@ -194,17 +179,29 @@ void executeQuery(
             "_shard_count", Block{{DataTypeUInt32().createColumnConst(1, shards), std::make_shared<DataTypeUInt32>(), "_shard_count"}});
         auto external_tables = context->getExternalTables();
 
-        /// We determine output stream sort properties by building a local plan (local because otherwise table could be unknown).
+        /// We determine output stream sort properties by a local plan (local because otherwise table could be unknown).
         /// If no local shard exist for this cluster, no sort properties will be provided, c'est la vie.
         SortDescription sort_description;
         DataStream::SortScope sort_scope = DataStream::SortScope::None;
-        for (const auto & shard_info : query_info.getCluster()->getShardsInfo())
+        if (!plans.empty())
         {
-            if (shard_info.isLocal())
+            const IQueryPlanStep * step = nullptr;
+            if (const auto * aggregating_step = dynamic_cast<const AggregatingStep *>(plans.front()->getRootNode()->step.get());
+                aggregating_step && aggregating_step->memoryBoundMergingWillBeUsed())
+                step = aggregating_step;
+            if (const auto * merging_step = dynamic_cast<const MergingAggregatedStep *>(plans.front()->getRootNode()->step.get());
+                merging_step && merging_step->memoryBoundMergingWillBeUsed())
+                step = merging_step;
+            if (step)
             {
-                std::tie(sort_description, sort_scope)
-                    = getOutputStreamSortingProperties(query_ast, new_context, processed_stage, remote_shards.size());
-                break;
+                /// Currently we've implemented sorting properties enforcing only for memory bound merging (and MBM is implemented only for aggregation in order).
+                /// So, we synchronize the corresponding settings.
+                new_context->setSetting("enable_memory_bound_merging_of_aggregation_results", true);
+                new_context->setSetting("optimize_aggregation_in_order", true);
+                /// And explicitly set the setting which will tell remote node to use aggregation in order and memory bound merging no matter what.
+                new_context->setSetting("force_aggregation_in_order", true);
+                sort_description = step->getOutputStream().sort_description;
+                sort_scope = step->getOutputStream().sort_scope;
             }
         }
 

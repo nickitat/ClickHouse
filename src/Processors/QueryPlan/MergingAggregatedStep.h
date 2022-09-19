@@ -33,10 +33,10 @@ public:
     void describeActions(JSONBuilder::JSONMap & map) const override;
     void describeActions(FormatSettings & settings) const override;
 
+    bool memoryBoundMergingWillBeUsed() const;
+
 private:
     void updateOutputStream() override;
-
-    bool memoryBoundMergingWillBeUsed() const;
 
     Aggregator::Params params;
     bool final;

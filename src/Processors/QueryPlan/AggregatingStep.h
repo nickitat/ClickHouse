@@ -54,10 +54,10 @@ public:
 
     const Aggregator::Params & getParams() const { return params; }
 
+    bool memoryBoundMergingWillBeUsed() const;
+
 private:
     void updateOutputStream() override;
-
-    bool memoryBoundMergingWillBeUsed() const;
 
     Aggregator::Params params;
     GroupingSetsParamsList grouping_sets_params;

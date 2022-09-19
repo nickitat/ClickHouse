@@ -2450,6 +2450,30 @@ void InterpreterSelectQuery::executeAggregation(QueryPlan & query_plan, const Ac
     else
         group_by_info = nullptr;
 
+    if (!group_by_info && settings.force_aggregation_in_order)
+    {
+        /// Not the most optimal implementation here, but this branch handles very marginal case.
+
+        group_by_sort_description = getSortDescriptionFromGroupBy(getSelectQuery());
+
+        auto sorting_step = std::make_unique<SortingStep>(
+            query_plan.getCurrentDataStream(),
+            group_by_sort_description,
+            settings.max_block_size,
+            0 /* LIMIT */,
+            SizeLimits(settings.max_rows_to_sort, settings.max_bytes_to_sort, settings.sort_overflow_mode),
+            settings.max_bytes_before_remerge_sort,
+            settings.remerge_sort_lowered_memory_bytes_ratio,
+            settings.max_bytes_before_external_sort,
+            context->getTemporaryVolume(),
+            settings.min_free_disk_space_for_temporary_data,
+            settings.optimize_sorting_by_input_stream_properties);
+
+        query_plan.addStep(std::move(sorting_step));
+
+        group_by_info = std::make_shared<InputOrderInfo>(group_by_sort_description, group_by_sort_description.size(), 1, 0);
+    }
+
     auto merge_threads = max_streams;
     auto temporary_data_merge_threads = settings.aggregation_memory_efficient_merge_threads
         ? static_cast<size_t>(settings.aggregation_memory_efficient_merge_threads)

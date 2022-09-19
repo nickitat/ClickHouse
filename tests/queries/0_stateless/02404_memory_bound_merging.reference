@@ -57,3 +57,38 @@ select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group b
 100503
 100504
 1
+-- { echoOn } --
+explain pipeline select a, count() from dist_t_different_dbs group by a order by a limit 5 offset 100500;
+(Expression)
+ExpressionTransform
+  (Limit)
+  Limit
+    (Sorting)
+    MergingSortedTransform 4 → 1
+      MergeSortingTransform × 4
+        LimitsCheckingTransform × 4
+          PartialSortingTransform × 4
+            (Expression)
+            ExpressionTransform × 4
+              (MergingAggregated)
+              MergingAggregatedBucketTransform × 4
+                Resize 1 → 4
+                  FinishAggregatingInOrderTransform 2 → 1
+                    (Union)
+                      (Aggregating)
+                      SortingAggregatedForMemoryBoundMergingTransform 4 → 1
+                        MergingAggregatedBucketTransform × 4
+                          Resize 1 → 4
+                            FinishAggregatingInOrderTransform 4 → 1
+                              AggregatingInOrderTransform × 4
+                                (Expression)
+                                ExpressionTransform × 4
+                                  (ReadFromMergeTree)
+                                  MergeTreeInOrder × 4 0 → 1
+                      (ReadFromRemote)
+select a, count() from dist_t_different_dbs group by a order by a limit 5 offset 100500;
+100500	2
+100501	2
+100502	2
+100503	2
+100504	2
