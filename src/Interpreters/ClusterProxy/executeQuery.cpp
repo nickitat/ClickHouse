@@ -15,9 +15,6 @@
 #include <QueryPipeline/Pipe.h>
 #include <Storages/SelectQueryInfo.h>
 
-#include <Processors/QueryPlan/AggregatingStep.h>
-#include <Processors/QueryPlan/MergingAggregatedStep.h>
-
 using namespace DB;
 
 namespace
