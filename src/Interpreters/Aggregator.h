@@ -961,6 +961,9 @@ public:
         };
         StatsCollectingParams stats_collecting_params;
 
+        /// Used for memory bound merging.
+        SortDescription sort_description;
+
         Params(
             const Names & keys_,
             const AggregateDescriptions & aggregates_,
@@ -979,7 +982,8 @@ public:
             size_t max_block_size_,
             bool enable_prefetch_,
             bool only_merge_, // true for projections
-            const StatsCollectingParams & stats_collecting_params_ = {})
+            const StatsCollectingParams & stats_collecting_params_ = {},
+            SortDescription sort_description_ = {})
             : keys(keys_)
             , aggregates(aggregates_)
             , keys_size(keys.size())
@@ -1000,6 +1004,7 @@ public:
             , only_merge(only_merge_)
             , enable_prefetch(enable_prefetch_)
             , stats_collecting_params(stats_collecting_params_)
+            , sort_description(sort_description_)
         {
         }
 

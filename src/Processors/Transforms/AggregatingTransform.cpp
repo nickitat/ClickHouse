@@ -1,10 +1,12 @@
 #include <Processors/Transforms/AggregatingTransform.h>
 
+#include <Core/ProtocolDefines.h>
 #include <Formats/NativeReader.h>
 #include <Processors/ISource.h>
-#include <QueryPipeline/Pipe.h>
 #include <Processors/Transforms/MergingAggregatedMemoryEfficientTransform.h>
-#include <Core/ProtocolDefines.h>
+#include <QueryPipeline/Pipe.h>
+#include "Processors/Merges/FinishAggregatingInOrderTransform.h"
+#include "Processors/Transforms/MemoryBoundMerging.h"
 
 namespace ProfileEvents
 {
@@ -381,9 +383,17 @@ private:
     }
 };
 
-AggregatingTransform::AggregatingTransform(Block header, AggregatingTransformParamsPtr params_)
-    : AggregatingTransform(std::move(header), std::move(params_)
-    , std::make_unique<ManyAggregatedData>(1), 0, 1, 1)
+AggregatingTransform::AggregatingTransform(
+    Block header, AggregatingTransformParamsPtr params_, bool memory_bound_merging_enabled_, size_t max_block_bytes_)
+    : AggregatingTransform(
+        std::move(header),
+        std::move(params_),
+        std::make_unique<ManyAggregatedData>(1),
+        0,
+        1,
+        1,
+        memory_bound_merging_enabled_,
+        max_block_bytes_)
 {
 }
 
@@ -393,7 +403,9 @@ AggregatingTransform::AggregatingTransform(
     ManyAggregatedDataPtr many_data_,
     size_t current_variant,
     size_t max_threads_,
-    size_t temporary_data_merge_threads_)
+    size_t temporary_data_merge_threads_,
+    bool memory_bound_merging_enabled_,
+    size_t max_block_bytes_)
     : IProcessor({std::move(header)}, {params_->getHeader()})
     , params(std::move(params_))
     , key_columns(params->params.keys_size)
@@ -402,6 +414,8 @@ AggregatingTransform::AggregatingTransform(
     , variants(*many_data->variants[current_variant])
     , max_threads(std::min(many_data->variants.size(), max_threads_))
     , temporary_data_merge_threads(temporary_data_merge_threads_)
+    , memory_bound_merging_enabled(memory_bound_merging_enabled_)
+    , max_block_bytes(max_block_bytes_)
 {
 }
 
@@ -622,7 +636,31 @@ void AggregatingTransform::initGenerate()
             ReadableSize(compressed_size),
             ReadableSize(uncompressed_size));
 
-        addMergingAggregatedMemoryEfficientTransform(pipe, params, temporary_data_merge_threads);
+        if (memory_bound_merging_enabled)
+        {
+            auto transform = std::make_shared<FinishAggregatingInOrderTransform>(
+                pipe.getHeader(),
+                pipe.numOutputPorts(),
+                params,
+                params->params.sort_description,
+                params->params.max_block_size,
+                max_block_bytes);
+
+            pipe.addTransform(std::move(transform));
+
+            /// Do merge of aggregated data in parallel.
+            pipe.resize(temporary_data_merge_threads);
+
+            pipe.addSimpleTransform(
+                [&](const Block &) { return std::make_shared<MergingAggregatedBucketTransform>(params, params->params.sort_description); });
+
+            pipe.addTransform(std::make_shared<SortingAggregatedForMemoryBoundMergingTransform>(
+                pipe.getHeader(), pipe.numOutputPorts(), params->params.sort_description));
+        }
+        else
+        {
+            addMergingAggregatedMemoryEfficientTransform(pipe, params, temporary_data_merge_threads);
+        }
 
         processors = Pipe::detachProcessors(std::move(pipe));
     }

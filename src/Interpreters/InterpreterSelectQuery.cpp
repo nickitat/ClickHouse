@@ -2347,7 +2347,8 @@ static Aggregator::Params getAggregatorParams(
     bool overflow_row,
     const Settings & settings,
     size_t group_by_two_level_threshold,
-    size_t group_by_two_level_threshold_bytes)
+    size_t group_by_two_level_threshold_bytes,
+    SortDescription sort_description)
 {
     const auto stats_collecting_params = Aggregator::Params::StatsCollectingParams(
         query_ptr,
@@ -2376,7 +2377,8 @@ static Aggregator::Params getAggregatorParams(
         settings.max_block_size,
         settings.enable_software_prefetch_in_aggregation,
         /* only_merge */ false,
-        stats_collecting_params
+        stats_collecting_params,
+        sort_description
     };
 }
 
@@ -2419,6 +2421,15 @@ void InterpreterSelectQuery::executeAggregation(QueryPlan & query_plan, const Ac
 
     const auto & keys = query_analyzer->aggregationKeys().getNames();
 
+    auto grouping_sets_params = getAggregatorGroupingSetsParams(*query_analyzer, keys);
+
+    SortDescription group_by_sort_description;
+
+    if (((group_by_info && settings.optimize_aggregation_in_order) || settings.enable_memory_bound_merging_of_aggregation_results) && !query_analyzer->useGroupingSetKey())
+        group_by_sort_description = getSortDescriptionFromGroupBy(getSelectQuery());
+    else
+        group_by_info = nullptr;
+
     auto aggregator_params = getAggregatorParams(
         query_ptr,
         *query_analyzer,
@@ -2428,16 +2439,8 @@ void InterpreterSelectQuery::executeAggregation(QueryPlan & query_plan, const Ac
         overflow_row,
         settings,
         settings.group_by_two_level_threshold,
-        settings.group_by_two_level_threshold_bytes);
-
-    auto grouping_sets_params = getAggregatorGroupingSetsParams(*query_analyzer, keys);
-
-    SortDescription group_by_sort_description;
-
-    if (group_by_info && settings.optimize_aggregation_in_order && !query_analyzer->useGroupingSetKey())
-        group_by_sort_description = getSortDescriptionFromGroupBy(getSelectQuery());
-    else
-        group_by_info = nullptr;
+        settings.group_by_two_level_threshold_bytes,
+        group_by_sort_description);
 
     if (!group_by_info && settings.force_aggregation_in_order)
     {
@@ -2565,7 +2568,8 @@ void InterpreterSelectQuery::executeRollupOrCube(QueryPlan & query_plan, Modific
     for (auto & aggregate : aggregates)
         aggregate.argument_names.clear();
 
-    auto params = getAggregatorParams(query_ptr, *query_analyzer, *context, keys, aggregates, false, settings, 0, 0);
+    auto params
+        = getAggregatorParams(query_ptr, *query_analyzer, *context, keys, aggregates, false, settings, 0, 0, {} /* sort_description */);
     const bool final = true;
 
     QueryPlanStepPtr step;
