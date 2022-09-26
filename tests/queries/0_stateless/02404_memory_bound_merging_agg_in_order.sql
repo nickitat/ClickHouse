@@ -76,9 +76,19 @@ select a, count() from pr_t group by a, b order by a limit 5 offset 500;
 
 -- { echoOff } --
 
-drop table if exists pr_t;
-drop table if exists dist_t_different_dbs;
-drop table if exists shard_1.t_different_dbs;
-drop table if exists t_different_dbs;
-drop table if exists dist_t;
-drop table if exists t;
+drop table pr_t;
+drop table dist_pr_t;
+drop table dist_t_different_dbs;
+drop table shard_1.t_different_dbs;
+
+create table t2(a UInt64, b UInt64) engine=MergeTree order by a settings index_granularity = 1;
+system stop merges on t2;
+insert into t2 select number, rand() from numbers_mt(2);
+insert into t2 select number, rand() from numbers_mt(2);
+insert into t2 select number, rand() from numbers_mt(2);
+
+set group_by_two_level_threshold = 1;
+set max_block_size = 1;
+set max_bytes_before_external_group_by = 1;
+
+select a, count() from t2 group by a order by a;

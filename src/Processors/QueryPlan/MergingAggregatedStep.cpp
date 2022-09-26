@@ -16,7 +16,7 @@ static bool memoryBoundMergingWillBeUsed(
     const SortDescription & group_by_sort_description)
 {
     return memory_bound_merging_of_aggregation_results_enabled && !group_by_sort_description.empty()
-        && input_stream.sort_scope >= DataStream::SortScope::Stream && input_stream.sort_description.hasPrefix(group_by_sort_description);
+        && input_stream.sort_scope >= DataStream::SortScope::Bucket && input_stream.sort_description.hasPrefix(group_by_sort_description);
 }
 
 static ITransformingStep::Traits getTraits(bool should_produce_results_in_order_of_bucket_number)
@@ -69,7 +69,8 @@ MergingAggregatedStep::MergingAggregatedStep(
     if (memoryBoundMergingWillBeUsed() && should_produce_results_in_order_of_bucket_number)
     {
         output_stream->sort_description = group_by_sort_description;
-        output_stream->sort_scope = DataStream::SortScope::Global;
+        output_stream->sort_scope = input_streams.front().sort_scope == DataStream::SortScope::Bucket ? DataStream::SortScope::Bucket
+                                                                                                      : DataStream::SortScope::Global;
     }
 }
 

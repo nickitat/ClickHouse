@@ -361,11 +361,19 @@ QueryPlanPtr MergeTreeDataSelectExecutor::read(
                     ? static_cast<size_t>(settings.aggregation_memory_efficient_merge_threads)
                     : static_cast<size_t>(settings.max_threads);
 
-                pipe.addSimpleTransform([&](const Block & header)
-                {
-                    return std::make_shared<AggregatingTransform>(
-                        header, transform_params, many_data, counter++, merge_threads, temporary_data_merge_threads);
-                });
+                pipe.addSimpleTransform(
+                    [&](const Block & header)
+                    {
+                        return std::make_shared<AggregatingTransform>(
+                            header,
+                            transform_params,
+                            many_data,
+                            counter++,
+                            merge_threads,
+                            temporary_data_merge_threads,
+                            settings.enable_memory_bound_merging_of_aggregation_results,
+                            settings.aggregation_in_order_max_block_bytes);
+                    });
             };
 
             if (!projection_pipe.empty())

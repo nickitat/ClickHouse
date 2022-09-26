@@ -164,6 +164,12 @@ private:
         bool is_overflows = agg_info->is_overflows;
         UInt64 chunk_num = agg_info->chunk_num;
 
+        LOG_DEBUG(
+            &Poco::Logger::get("debug"),
+            "SortingAggregatedForMemoryBoundMergingTransform addChunk bucket_id={}, chunk_num={}",
+            bucket_id,
+            chunk_num);
+
         if (is_overflows)
             overflow_chunk = std::move(chunk);
         else
@@ -173,8 +179,9 @@ private:
             {
                 throw Exception(
                     ErrorCodes::LOGICAL_ERROR,
-                    "SortingAggregatedForMemoryBoundMergingTransform already got bucket with number {}",
-                    bucket_id);
+                    "SortingAggregatedForMemoryBoundMergingTransform already got bucket with bucket_id={}, chunk_num={}",
+                    bucket_id,
+                    chunk_num);
             }
 
             chunks[chunk_id] = std::move(chunk);
@@ -184,7 +191,7 @@ private:
 
     struct ChunkId
     {
-        Int32 bucket_id;
+        Int32 bucket_id; // -1 for single-level HT, or 0..255 for two-level
         UInt64 chunk_num;
 
         bool operator<(const ChunkId & other) const

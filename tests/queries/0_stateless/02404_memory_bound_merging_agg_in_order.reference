@@ -141,3 +141,5 @@ select a, count() from pr_t group by a, b order by a limit 5 offset 500;
 502	1000
 503	1000
 504	1000
+0	3
+1	3

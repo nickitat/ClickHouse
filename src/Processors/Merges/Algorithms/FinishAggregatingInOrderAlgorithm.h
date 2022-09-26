@@ -1,9 +1,10 @@
 #pragma once
 
+#include <Core/Block.h>
+#include <Core/SortDescription.h>
 #include <Processors/Merges/Algorithms/IMergingAlgorithm.h>
 #include <Processors/Merges/Algorithms/MergedData.h>
-#include <Core/SortDescription.h>
-#include <Core/Block.h>
+#include "Common/typeid_cast.h"
 #include <Common/ThreadPool.h>
 
 namespace DB
@@ -53,6 +54,18 @@ private:
     Chunk prepareToMerge();
     void addToAggregation();
 
+    ssize_t getCurrentBucketNum() const
+    {
+        /*if (bucket_nums.empty())
+            return -2;
+
+        if (bucket_nums.begin()->second <= 0)
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "bug :(");
+
+        return bucket_nums.begin()->first;*/
+        return current_bucket_num;
+    }
+
     struct State
     {
         Columns all_columns;
@@ -69,11 +82,16 @@ private:
         /// Number of bytes in all columns + number of bytes in arena, related to current chunk.
         size_t total_bytes = 0;
 
-        State(const Chunk & chunk, const SortDescriptionWithPositions & description, Int64 total_bytes_);
+        ssize_t bucket_num = -2;
+
+        State(const Chunk & chunk, const SortDescriptionWithPositions & description, Int64 total_bytes_, ssize_t bucket_num_);
         State() = default;
 
-        bool isValid() const { return current_row < num_rows; }
+        bool isValid(ssize_t current_bucket) const { return current_row < num_rows && bucket_num <= current_bucket; }
     };
+
+    // std::map<ssize_t, ssize_t> bucket_nums;
+    ssize_t current_bucket_num = 100000;
 
     Block header;
     size_t num_inputs;

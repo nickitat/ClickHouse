@@ -140,7 +140,7 @@ using ManyAggregatedDataPtr = std::shared_ptr<ManyAggregatedData>;
 class AggregatingTransform : public IProcessor
 {
 public:
-    AggregatingTransform(Block header, AggregatingTransformParamsPtr params_);
+    AggregatingTransform(Block header, AggregatingTransformParamsPtr params_, bool memory_bound_merging_enabled_, size_t max_block_bytes_);
 
     /// For Parallel aggregating.
     AggregatingTransform(
@@ -149,7 +149,10 @@ public:
         ManyAggregatedDataPtr many_data,
         size_t current_variant,
         size_t max_threads,
-        size_t temporary_data_merge_threads);
+        size_t temporary_data_merge_threads,
+        bool memory_bound_merging_enabled_,
+        size_t max_block_bytes_);
+
     ~AggregatingTransform() override;
 
     String getName() const override { return "AggregatingTransform"; }
@@ -181,6 +184,8 @@ private:
     AggregatedDataVariants & variants;
     size_t max_threads = 1;
     size_t temporary_data_merge_threads = 1;
+    bool memory_bound_merging_enabled;
+    size_t max_block_bytes;
 
     /// TODO: calculate time only for aggregation.
     Stopwatch watch;

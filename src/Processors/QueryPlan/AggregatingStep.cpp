@@ -228,7 +228,15 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
                     auto many_data = std::make_shared<ManyAggregatedData>(streams);
                     for (size_t j = 0; j < streams; ++j)
                     {
-                        auto aggregation_for_set = std::make_shared<AggregatingTransform>(input_header, transform_params_for_set, many_data, j, merge_threads, temporary_data_merge_threads);
+                        auto aggregation_for_set = std::make_shared<AggregatingTransform>(
+                            input_header,
+                            transform_params_for_set,
+                            many_data,
+                            j,
+                            merge_threads,
+                            temporary_data_merge_threads,
+                            memory_bound_merging_of_aggregation_results_enabled,
+                            aggregation_in_order_max_block_bytes);
                         // For each input stream we have `grouping_sets_size` copies, so port index
                         // for transform #j should skip ports of first (j-1) streams.
                         connect(*ports[i + grouping_sets_size * j], aggregation_for_set->getInputs().front());
@@ -238,7 +246,11 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
                 }
                 else
                 {
-                    auto aggregation_for_set = std::make_shared<AggregatingTransform>(input_header, transform_params_for_set);
+                    auto aggregation_for_set = std::make_shared<AggregatingTransform>(
+                        input_header,
+                        transform_params_for_set,
+                        memory_bound_merging_of_aggregation_results_enabled,
+                        aggregation_in_order_max_block_bytes);
                     connect(*ports[i], aggregation_for_set->getInputs().front());
                     ports[i] = &aggregation_for_set->getOutputs().front();
                     processors.push_back(aggregation_for_set);
@@ -416,10 +428,19 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
         auto many_data = std::make_shared<ManyAggregatedData>(pipeline.getNumStreams());
 
         size_t counter = 0;
-        pipeline.addSimpleTransform([&](const Block & header)
-        {
-            return std::make_shared<AggregatingTransform>(header, transform_params, many_data, counter++, merge_threads, temporary_data_merge_threads);
-        });
+        pipeline.addSimpleTransform(
+            [&](const Block & header)
+            {
+                return std::make_shared<AggregatingTransform>(
+                    header,
+                    transform_params,
+                    many_data,
+                    counter++,
+                    merge_threads,
+                    temporary_data_merge_threads,
+                    memory_bound_merging_of_aggregation_results_enabled,
+                    aggregation_in_order_max_block_bytes);
+            });
 
         pipeline.resize(should_produce_results_in_order_of_bucket_number ? 1 : params.max_threads, true /* force */);
 
@@ -427,7 +448,12 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
     }
     else
     {
-        pipeline.addSimpleTransform([&](const Block & header) { return std::make_shared<AggregatingTransform>(header, transform_params); });
+        pipeline.addSimpleTransform(
+            [&](const Block & header)
+            {
+                return std::make_shared<AggregatingTransform>(
+                    header, transform_params, memory_bound_merging_of_aggregation_results_enabled, aggregation_in_order_max_block_bytes);
+            });
 
         pipeline.resize(should_produce_results_in_order_of_bucket_number ? 1 : params.max_threads, false /* force */);
 
