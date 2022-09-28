@@ -17,9 +17,7 @@ SourceFromSingleChunk::SourceFromSingleChunk(Block data) : ISource(data.cloneEmp
 
     if (has_aggregate_functions)
     {
-        auto info = std::make_shared<AggregatedChunkInfo>();
-        info->bucket_num = data.info.bucket_num;
-        info->is_overflows = data.info.is_overflows;
+        auto info = std::make_shared<AggregatedChunkInfo>(data.info);
         chunk.setChunkInfo(std::move(info));
     }
 }

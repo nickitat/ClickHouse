@@ -298,8 +298,7 @@ void GroupingAggregatedTransform::work()
                 continue;
 
             Int32 bucket = cur_block.info.bucket_num;
-            auto chunk_info = std::make_shared<AggregatedChunkInfo>();
-            chunk_info->bucket_num = bucket;
+            auto chunk_info = std::make_shared<AggregatedChunkInfo>(cur_block.info);
             chunks_map[bucket].emplace_back(Chunk(cur_block.getColumns(), cur_block.rows(), std::move(chunk_info)));
         }
     }
@@ -335,6 +334,7 @@ void MergingAggregatedBucketTransform::transform(Chunk & chunk)
             Block block = header.cloneWithColumns(cur_chunk.detachColumns());
             block.info.is_overflows = agg_info->is_overflows;
             block.info.bucket_num = agg_info->bucket_num;
+            block.info.is_bucket_sorted = agg_info->is_bucket_sorted;
 
             blocks_list.emplace_back(std::move(block));
         }
@@ -353,10 +353,9 @@ void MergingAggregatedBucketTransform::transform(Chunk & chunk)
         }
     }
 
-    auto res_info = std::make_shared<AggregatedChunkInfo>();
-    res_info->is_overflows = chunks_to_merge->is_overflows;
-    res_info->bucket_num = chunks_to_merge->bucket_num;
-    res_info->chunk_num = chunks_to_merge->chunk_num;
+    auto res_info = std::make_shared<AggregatedChunkInfo>(
+        chunks_to_merge->is_overflows, chunks_to_merge->bucket_num, !required_sort_description.empty(), chunks_to_merge->chunk_num);
+
     chunk.setChunkInfo(std::move(res_info));
 
     auto block = params->aggregator.mergeBlocks(blocks_list, params->final);

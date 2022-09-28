@@ -303,7 +303,7 @@ namespace
     public:
         explicit AddingAggregatedChunkInfoTransform(Block header) : ISimpleTransform(header, header, false) { }
 
-        void transform(Chunk & chunk) override { chunk.setChunkInfo(std::make_shared<AggregatedChunkInfo>()); }
+        void transform(Chunk & chunk) override { chunk.setChunkInfo(std::make_shared<AggregatedChunkInfo>(BlockInfo{})); }
 
         String getName() const override { return "AddingAggregatedChunkInfoTransform"; }
     };

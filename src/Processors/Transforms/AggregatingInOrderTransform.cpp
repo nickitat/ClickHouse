@@ -352,7 +352,7 @@ void FinalizeAggregatedTransform::transform(Chunk & chunk)
         finalizeChunk(chunk, aggregates_mask);
     else if (!chunk.getChunkInfo())
     {
-        auto info = std::make_shared<AggregatedChunkInfo>();
+        auto info = std::make_shared<AggregatedChunkInfo>(BlockInfo{});
         chunk.setChunkInfo(std::move(info));
     }
 }

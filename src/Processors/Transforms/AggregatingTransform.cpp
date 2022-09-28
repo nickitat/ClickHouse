@@ -25,9 +25,7 @@ namespace ErrorCodes
 /// Adds additional info about aggregation.
 Chunk convertToChunk(const Block & block)
 {
-    auto info = std::make_shared<AggregatedChunkInfo>();
-    info->bucket_num = block.info.bucket_num;
-    info->is_overflows = block.info.is_overflows;
+    auto info = std::make_shared<AggregatedChunkInfo>(block.info);
 
     UInt64 num_rows = block.rows();
     Chunk chunk(block.getColumns(), num_rows);

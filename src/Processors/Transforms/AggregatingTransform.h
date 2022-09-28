@@ -13,8 +13,17 @@ namespace DB
 class AggregatedChunkInfo : public ChunkInfo
 {
 public:
+    AggregatedChunkInfo(bool is_overflows_, Int32 bucket_num_, bool is_bucket_sorted_, UInt64 chunk_num_ = 0)
+        : is_overflows(is_overflows_), bucket_num(bucket_num_), is_bucket_sorted(is_bucket_sorted_), chunk_num(chunk_num_)
+    {
+    }
+
+    explicit AggregatedChunkInfo(const BlockInfo & info)
+        : AggregatedChunkInfo(info.is_overflows, info.bucket_num, info.is_bucket_sorted) { }
+
     bool is_overflows = false;
     Int32 bucket_num = -1;
+    bool is_bucket_sorted = false;
     UInt64 chunk_num = 0; // chunk number in order of generation, used during memory bound merging to restore chunks order
 };
 
