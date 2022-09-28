@@ -28,9 +28,15 @@ struct BlockInfo
       * Otherwise -1.
       */
 
+    /** is_bucket_sorted:
+      * By setting this flag to true remote nodes communicate to the initiator whether their buckets were sorted during local aggregation or not.
+      * Used for memory bound merging.
+      */
+
 #define APPLY_FOR_BLOCK_INFO_FIELDS(M) \
-    M(bool,     is_overflows,     false,     1) \
-    M(Int32,    bucket_num,     -1,     2)
+    M(bool,     is_overflows,       false,  1) \
+    M(Int32,    bucket_num,         -1,     2) \
+    M(bool,     is_bucket_sorted,   false,  3)
 
 #define DECLARE_FIELD(TYPE, NAME, DEFAULT, FIELD_NUM) \
     TYPE NAME = DEFAULT;

@@ -46,6 +46,7 @@ void MergingAggregatedTransform::consume(Chunk chunk)
         auto block = getInputPort().getHeader().cloneWithColumns(chunk.getColumns());
         block.info.is_overflows = agg_info->is_overflows;
         block.info.bucket_num = agg_info->bucket_num;
+        block.info.is_bucket_sorted = agg_info->is_bucket_sorted;
 
         bucket_to_blocks[agg_info->bucket_num].emplace_back(std::move(block));
     }
@@ -83,9 +84,7 @@ Chunk MergingAggregatedTransform::generate()
     auto block = std::move(*next_block);
     ++next_block;
 
-    auto info = std::make_shared<AggregatedChunkInfo>();
-    info->bucket_num = block.info.bucket_num;
-    info->is_overflows = block.info.is_overflows;
+    auto info = std::make_shared<AggregatedChunkInfo>(block.info);
 
     UInt64 num_rows = block.rows();
     Chunk chunk(block.getColumns(), num_rows);

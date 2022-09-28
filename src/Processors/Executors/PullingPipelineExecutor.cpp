@@ -79,6 +79,7 @@ bool PullingPipelineExecutor::pull(Block & block)
         {
             block.info.bucket_num = agg_info->bucket_num;
             block.info.is_overflows = agg_info->is_overflows;
+            block.info.is_bucket_sorted = agg_info->is_bucket_sorted;
         }
     }
 
