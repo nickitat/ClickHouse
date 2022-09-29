@@ -5,8 +5,8 @@ system stop merges t;
 insert into t select number, number from numbers_mt(1e6);
 
 set enable_memory_bound_merging_of_aggregation_results = 1;
-set group_by_two_level_threshold = 1;
-set max_bytes_before_external_group_by = 1;
+set group_by_two_level_threshold = 500;
+set max_bytes_before_external_group_by = 1000;
 set max_threads = 4;
 set optimize_aggregation_in_order = 0;
 set prefer_localhost_replica = 1;
@@ -50,6 +50,8 @@ select a, count() from dist_t_different_dbs group by a, b order by a limit 5 off
 
 -- { echoOff } --
 
+drop table shard_1.t_different_dbs;
+
 set allow_experimental_parallel_reading_from_replicas = 1;
 set max_parallel_replicas = 3;
 set use_hedged_requests = 0;
@@ -72,10 +74,24 @@ insert into t2 select number, rand() from numbers_mt(2);
 insert into t2 select number, rand() from numbers_mt(2);
 insert into t2 select number, rand() from numbers_mt(2);
 
-set group_by_two_level_threshold = 1;
-set max_block_size = 1;
-set max_bytes_before_external_group_by = 1;
+select a, count() from t2 group by a order by a settings group_by_two_level_threshold = 1, max_block_size = 1, max_bytes_before_external_group_by = 1;
 
-select a, count() from t2 group by a order by a;
+create table t3(a UInt8) engine=MergeTree order by a settings index_granularity = 1;
+system stop merges on t3;
+insert into t3 select number from numbers_mt(10);
+insert into t3 select number from numbers_mt(10);
+insert into t3 select number from numbers_mt(10);
 
-drop table shard_1.t_different_dbs;
+select a, count() from t3 group by a order by a settings group_by_two_level_threshold = 1, max_block_size = 1, max_bytes_before_external_group_by = 1;
+select a, count() from remote('127.0.0.{1,2}', currentDatabase(), t3) group by a order by a settings group_by_two_level_threshold = 1, max_block_size = 1, max_bytes_before_external_group_by = 1;
+
+-- with overflow row --
+
+set group_by_two_level_threshold = 100000;
+set max_bytes_before_external_group_by = 100000000;
+set max_untracked_memory = 0;
+
+create table t4(a UInt8) engine=MergeTree order by a settings index_granularity = 1;
+insert into t4 select * from numbers_mt(100);
+select a, count() from t4 group by a with totals order by a settings max_rows_to_group_by = 10, group_by_overflow_mode = 'any', max_block_size = 1, totals_mode = 'before_having';
+select a, count() as c from remote('127.0.0.{1,2}', currentDatabase(), t4) group by a with totals order by a, c settings max_rows_to_group_by = 10, group_by_overflow_mode = 'any', max_block_size = 1, totals_mode = 'before_having';

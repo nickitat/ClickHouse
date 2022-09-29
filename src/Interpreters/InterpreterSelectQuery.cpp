@@ -2378,6 +2378,7 @@ static Aggregator::Params getAggregatorParams(
         settings.enable_software_prefetch_in_aggregation,
         /* only_merge */ false,
         stats_collecting_params,
+        settings.enable_memory_bound_merging_of_aggregation_results,
         sort_description
     };
 }

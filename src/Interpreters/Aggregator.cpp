@@ -1717,7 +1717,10 @@ void Aggregator::writeToTemporaryFileImpl(
         Block block = convertOneBucketToBlock(data_variants, method, data_variants.aggregates_pool, false, bucket);
 
         if (!params.sort_description.empty())
+        {
             sortBlock(block, params.sort_description);
+            block.info.is_bucket_sorted = true;
+        }
 
         out.write(block);
         update_max_sizes(block);
@@ -2686,6 +2689,12 @@ ManyAggregatedDataVariants Aggregator::prepareVariantsToMerge(ManyAggregatedData
     /// Note - perhaps it would be more optimal not to convert single-level versions before the merge, but merge them separately, at the end.
 
     bool has_at_least_one_two_level = false;
+
+    /// We force conversion to two-level to not deal with single-level HT during memory bound merging.
+    /// If it is not convertible it won't be a problem, since group by key == HT type will be equal on all nodes.
+    if (params.memory_bound_merging_enabled && non_empty_data.front()->isConvertibleToTwoLevel())
+        has_at_least_one_two_level = true;
+
     for (const auto & variant : non_empty_data)
     {
         if (variant->isTwoLevel())
