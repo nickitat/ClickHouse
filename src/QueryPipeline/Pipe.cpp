@@ -165,10 +165,13 @@ Pipe::Pipe(ProcessorPtr source, OutputPort * output, OutputPort * totals, Output
 Pipe::Pipe(ProcessorPtr source)
     : processors(std::make_shared<Processors>())
 {
-    checkSource(*source);
+    // checkSource(*source);
 
     if (collected_processors)
         collected_processors->emplace_back(source);
+
+    if (source->getOutputs().size() != 1)
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "");
 
     output_ports.push_back(&source->getOutputs().front());
     header = output_ports.front()->getHeader();

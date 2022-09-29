@@ -96,6 +96,12 @@ private:
     Block header;
     size_t num_inputs;
     AggregatingTransformParamsPtr params;
+
+    /// todo: remove me
+    SortDescription sort_description;
+
+    Chunks overflow_chunks;
+
     SortDescriptionWithPositions description;
     size_t max_block_size;
     size_t max_block_bytes;

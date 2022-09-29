@@ -147,6 +147,9 @@ void TotalsHavingTransform::work()
 
 void TotalsHavingTransform::transform(Chunk & chunk)
 {
+    if (!chunk.hasRows())
+        return;
+
     /// Block with values not included in `max_rows_to_group_by`. We'll postpone it.
     if (overflow_row)
     {

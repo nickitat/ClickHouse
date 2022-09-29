@@ -2435,6 +2435,7 @@ static Aggregator::Params getAggregatorParams(
         settings.enable_software_prefetch_in_aggregation,
         /* only_merge */ false,
         stats_collecting_params,
+        settings.enable_memory_bound_merging_of_aggregation_results,
         sort_description
     };
 }
@@ -2517,6 +2518,13 @@ void InterpreterSelectQuery::executeAggregation(QueryPlan & query_plan, const Ac
         group_by_sort_description = getSortDescriptionFromGroupBy(getSelectQuery());
     else
         group_by_info = nullptr;
+
+    LOG_DEBUG(
+        &Poco::Logger::get("debug"),
+        "executeAggregation {} {} {}",
+        !!group_by_info,
+        settings.optimize_aggregation_in_order,
+        group_by_sort_description.size());
 
     auto aggregator_params = getAggregatorParams(
         query_ptr,

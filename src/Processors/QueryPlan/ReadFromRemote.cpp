@@ -66,7 +66,7 @@ static void enforceSorting(QueryProcessingStage::Enum stage, DataStream & output
     context.setSetting("enable_memory_bound_merging_of_aggregation_results", true);
 
     output_stream.sort_description = std::move(output_sort_description);
-    output_stream.sort_scope = DataStream::SortScope::Stream;
+    output_stream.sort_scope = DataStream::SortScope::Global;
 }
 
 static void enforceAggregationInOrder(QueryProcessingStage::Enum stage, Context & context)

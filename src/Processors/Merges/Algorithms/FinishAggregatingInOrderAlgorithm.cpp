@@ -1,8 +1,9 @@
-#include <Processors/Merges/Algorithms/FinishAggregatingInOrderAlgorithm.h>
-#include <Processors/Transforms/MergingAggregatedMemoryEfficientTransform.h>
-#include <Processors/Transforms/AggregatingTransform.h>
-#include <Processors/Transforms/AggregatingInOrderTransform.h>
 #include <Core/SortCursor.h>
+#include <Interpreters/sortBlock.h>
+#include <Processors/Merges/Algorithms/FinishAggregatingInOrderAlgorithm.h>
+#include <Processors/Transforms/AggregatingInOrderTransform.h>
+#include <Processors/Transforms/AggregatingTransform.h>
+#include <Processors/Transforms/MergingAggregatedMemoryEfficientTransform.h>
 
 #include <base/range.h>
 
@@ -47,7 +48,12 @@ FinishAggregatingInOrderAlgorithm::FinishAggregatingInOrderAlgorithm(
     const SortDescription & description_,
     size_t max_block_size_,
     size_t max_block_bytes_)
-    : header(header_), num_inputs(num_inputs_), params(params_), max_block_size(max_block_size_), max_block_bytes(max_block_bytes_)
+    : header(header_)
+    , num_inputs(num_inputs_)
+    , params(params_)
+    , sort_description(description_)
+    , max_block_size(max_block_size_)
+    , max_block_bytes(max_block_bytes_)
 {
     for (const auto & column_description : description_)
         description.emplace_back(column_description, header_.getPositionByName(column_description.column_name));
@@ -81,13 +87,32 @@ void FinishAggregatingInOrderAlgorithm::consume(Input & input, size_t source_num
         allocated_bytes = arenas_info->allocated_bytes;
 
     ssize_t bucket_num = -1;
+    bool is_bucket_sorted = false;
     if (const auto * chunk_info = typeid_cast<const AggregatedChunkInfo *>(info.get()))
+    {
+        if (chunk_info->is_overflows)
+        {
+            overflow_chunks.emplace_back(std::move(input.chunk));
+            inputs_to_update.push_back(source_num);
+            return;
+        }
+
         bucket_num = chunk_info->bucket_num;
+        is_bucket_sorted = chunk_info->is_bucket_sorted;
+    }
 
     // ++bucket_nums[bucket_num];
     current_bucket_num = std::min(current_bucket_num, bucket_num);
 
-    states[source_num] = State{input.chunk, description, allocated_bytes, bucket_num};
+    Block block = header.cloneWithColumns(input.chunk.detachColumns());
+    if (!sort_description.empty() && !is_bucket_sorted)
+    {
+        sortBlock(block, sort_description);
+        LOG_DEBUG(&Poco::Logger::get("debug"), "FinishAggregatingInOrderAlgorithm::consume unsorted bucket");
+    }
+    Chunk chunk(block.getColumns(), block.rows());
+
+    states[source_num] = State{chunk, description, allocated_bytes, bucket_num};
 
     /*std::string s;
     for (size_t i = 0; i < num_inputs; ++i)
@@ -128,7 +153,15 @@ IMergingAlgorithm::Status FinishAggregatingInOrderAlgorithm::merge()
 
     // LOG_DEBUG(&Poco::Logger::get("debug"), "best_input={}", best_input.value_or(-1));
     if (!best_input)
-        return Status(prepareToMerge(), chunks.empty());
+    {
+        Chunk chunk;
+        if (!chunks.empty())
+        {
+            chunk = prepareToMerge();
+            return Status(std::move(chunk), chunks.empty() && overflow_chunks.empty());
+        }
+        return Status(prepareToMerge(), true);
+    }
 
     /// Chunk at best_input will be aggregated entirely.
     auto & best_state = states[*best_input];
@@ -198,7 +231,13 @@ Chunk FinishAggregatingInOrderAlgorithm::prepareToMerge()
     }
     else
     {
-        info->chunks = std::make_unique<Chunks>(std::move(chunks));
+        if (!overflow_chunks.empty())
+        {
+            info->chunks = std::make_unique<Chunks>(std::move(overflow_chunks));
+            info->is_overflows = true;
+        }
+        else
+            info->chunks = std::make_unique<Chunks>();
     }
 
     Chunk chunk;
@@ -229,9 +268,7 @@ void FinishAggregatingInOrderAlgorithm::addToAggregation()
             chunks.emplace_back(std::move(new_columns), current_rows);
         }
 
-        auto chunk_info = std::make_shared<AggregatedChunkInfo>();
-        chunk_info->bucket_num = current_bucket_num;
-        chunk_info->chunk_num = chunk_num++;
+        auto chunk_info = std::make_shared<AggregatedChunkInfo>(false, current_bucket_num, true, chunk_num++);
         chunks.back().setChunkInfo(std::move(chunk_info));
         states[i].current_row = states[i].to_row;
 

@@ -1,0 +1,8 @@
+<clickhouse>
+    <profiles>
+        <default>
+            <max_threads>1</max_threads>
+            <max_bytes_before_external_group_by>0</max_bytes_before_external_group_by>
+        </default>
+    </profiles>
+</clickhouse>

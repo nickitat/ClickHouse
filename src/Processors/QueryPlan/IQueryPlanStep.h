@@ -36,7 +36,6 @@ public:
     {
         None = 0,
         Chunk = 1, /// Separate chunks are sorted
-        Bucket = 2, /// Data is sorted within each bucket_id
         Stream = 3, /// Each data steam is sorted
         Global = 4, /// Data is globally sorted
     };

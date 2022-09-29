@@ -1736,7 +1736,10 @@ void Aggregator::writeToTemporaryFileImpl(
         Block block = convertOneBucketToBlock(data_variants, method, data_variants.aggregates_pool, false, bucket);
 
         if (!params.sort_description.empty())
+        {
             sortBlock(block, params.sort_description);
+            block.info.is_bucket_sorted = true;
+        }
 
         out.write(block);
         update_max_sizes(block);
@@ -2718,6 +2721,7 @@ ManyAggregatedDataVariants Aggregator::prepareVariantsToMerge(ManyAggregatedData
     /// Note - perhaps it would be more optimal not to convert single-level versions before the merge, but merge them separately, at the end.
 
     bool has_at_least_one_two_level = false;
+
     for (const auto & variant : non_empty_data)
     {
         if (variant->isTwoLevel())
@@ -3334,6 +3338,8 @@ void Aggregator::destroyAllAggregateStates(AggregatedDataVariants & result) cons
 {
     if (result.empty())
         return;
+
+    LOG_DEBUG(log, "destroyAllAggregateStates, result_size={}", result.size());
 
     /// In what data structure is the data aggregated?
     if (result.type == AggregatedDataVariants::Type::without_key || params.overflow_row)

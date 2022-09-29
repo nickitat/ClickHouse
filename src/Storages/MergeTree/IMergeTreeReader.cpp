@@ -115,6 +115,7 @@ void IMergeTreeReader::evaluateMissingDefaults(Block additional_columns, Columns
                 ExpressionActions>(std::move(dag),
                 ExpressionActionsSettings::fromSettings(data_part_info_for_read->getContext()->getSettingsRef()));
             actions->execute(additional_columns);
+            LOG_DEBUG(&Poco::Logger::get("debug"), "evaluateMissingDefaults:\n{}", actions->dumpActions());
         }
 
         /// Move columns from block.

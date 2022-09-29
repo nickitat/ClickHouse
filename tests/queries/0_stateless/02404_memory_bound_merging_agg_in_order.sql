@@ -26,9 +26,13 @@ create table dist_t as t engine = Distributed(test_cluster_two_shards, currentDa
 -- { echoOn } --
 explain pipeline select a from remote(test_cluster_two_shards, currentDatabase(), t) group by a;
 
+explain sorting=1 select a from remote(test_cluster_two_shards, currentDatabase(), t) group by a;
+
 select a from remote(test_cluster_two_shards, currentDatabase(), t) group by a order by a limit 5 offset 100500;
 
 explain pipeline select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group by a;
+
+explain sorting=1 select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group by a;
 
 select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group by a order by a limit 5 offset 100500;
 

@@ -3,19 +3,33 @@ explain pipeline select a from remote(test_cluster_two_shards, currentDatabase()
 (Expression)
 ExpressionTransform × 4
   (MergingAggregated)
-  MergingAggregatedBucketTransform × 4
-    Resize 1 → 4
-      FinishAggregatingInOrderTransform 2 → 1
-        (Union)
-          (Aggregating)
-          Resize 4 → 1
-            AggregatingTransform × 4
-              StrictResize 4 → 4
-                (Expression)
-                ExpressionTransform × 4
-                  (ReadFromMergeTree)
-                  MergeTreeThread × 4 0 → 1
-          (ReadFromRemote)
+  Resize 1 → 4
+    ChooseMergingAlgorithmTransform 2 → 1
+      (Union)
+        (Aggregating)
+        Resize 4 → 1
+          AggregatingTransform × 4
+            StrictResize 4 → 4
+              (Expression)
+              ExpressionTransform × 4
+                (ReadFromMergeTree)
+                MergeTreeThread × 4 0 → 1
+        (ReadFromRemote)
+explain sorting=1 select a from remote(test_cluster_two_shards, currentDatabase(), t) group by a;
+Expression ((Projection + Before ORDER BY))
+Sorting (None)
+  MergingAggregated
+  Sorting (None)
+    Union
+    Sorting (None)
+      Aggregating
+      Sorting (None)
+        Expression (Before GROUP BY)
+        Sorting (Chunk): a ASC
+          ReadFromMergeTree (default.t)
+          Sorting (Chunk): a ASC
+      ReadFromRemote (Read from remote replica)
+      Sorting (None)
 select a from remote(test_cluster_two_shards, currentDatabase(), t) group by a order by a limit 5 offset 100500;
 100500
 100501
@@ -26,26 +40,43 @@ explain pipeline select a from remote(test_cluster_two_shards, currentDatabase()
 (Expression)
 ExpressionTransform × 4
   (MergingAggregated)
-  MergingAggregatedBucketTransform × 4
-    Resize 1 → 4
-      FinishAggregatingInOrderTransform 2 → 1
-        (Union)
-          (MergingAggregated)
-          SortingAggregatedForMemoryBoundMergingTransform 4 → 1
-            MergingAggregatedBucketTransform × 4
-              Resize 1 → 4
-                FinishAggregatingInOrderTransform 2 → 1
-                  (Union)
-                    (Aggregating)
-                    Resize 4 → 1
-                      AggregatingTransform × 4
-                        StrictResize 4 → 4
-                          (Expression)
-                          ExpressionTransform × 4
-                            (ReadFromMergeTree)
-                            MergeTreeThread × 4 0 → 1
-                    (ReadFromRemote)
-          (ReadFromRemote)
+  Resize 1 → 4
+    ChooseMergingAlgorithmTransform 2 → 1
+      (Union)
+        (MergingAggregated)
+        ChooseMergingAlgorithmTransform 2 → 1
+          (Union)
+            (Aggregating)
+            Resize 4 → 1
+              AggregatingTransform × 4
+                StrictResize 4 → 4
+                  (Expression)
+                  ExpressionTransform × 4
+                    (ReadFromMergeTree)
+                    MergeTreeThread × 4 0 → 1
+            (ReadFromRemote)
+        (ReadFromRemote)
+explain sorting=1 select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group by a;
+Expression ((Projection + Before ORDER BY))
+Sorting (None)
+  MergingAggregated
+  Sorting (None)
+    Union
+    Sorting (None)
+      MergingAggregated
+      Sorting (None)
+        Union
+        Sorting (None)
+          Aggregating
+          Sorting (None)
+            Expression (Before GROUP BY)
+            Sorting (Chunk): a ASC
+              ReadFromMergeTree (default.t)
+              Sorting (Chunk): a ASC
+          ReadFromRemote (Read from remote replica)
+          Sorting (None)
+      ReadFromRemote (Read from remote replica)
+      Sorting (None)
 select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group by a order by a limit 5 offset 100500;
 100500
 100501
@@ -67,31 +98,28 @@ ExpressionTransform
             (Expression)
             ExpressionTransform × 4
               (MergingAggregated)
-              MergingAggregatedBucketTransform × 4
-                Resize 1 → 4
-                  FinishAggregatingInOrderTransform 2 → 1
-                    (Union)
-                      (Aggregating)
-                      Resize 4 → 1
-                        AggregatingTransform × 4
-                          StrictResize 4 → 4
-                            (Expression)
-                            ExpressionTransform × 4
-                              (ReadFromMergeTree)
-                              MergeTreeThread × 4 0 → 1
-                      (ReadFromRemote)
+              Resize 1 → 4
+                ChooseMergingAlgorithmTransform 2 → 1
+                  (Union)
+                    (Aggregating)
+                    AggregatingTransform
+                      (Expression)
+                      ExpressionTransform
+                        (ReadFromMergeTree)
+                        MergeTreeInOrder 0 → 1
+                    (ReadFromRemote)
 select a, count() from dist_t_different_dbs group by a order by a limit 5 offset 500;
-500	2000
-501	2000
-502	2000
-503	2000
-504	2000
+500	200
+501	200
+502	200
+503	200
+504	200
 select a, count() from dist_t_different_dbs group by a, b order by a limit 5 offset 500;
-500	2000
-501	2000
-502	2000
-503	2000
-504	2000
+500	200
+501	200
+502	200
+503	200
+504	200
 -- { echoOn } --
 explain pipeline select a from dist_pr_t group by a order by a limit 5 offset 500;
 (Expression)
@@ -106,30 +134,63 @@ ExpressionTransform
             (Expression)
             ExpressionTransform × 4
               (MergingAggregated)
-              MergingAggregatedBucketTransform × 4
-                Resize 1 → 4
-                  FinishAggregatingInOrderTransform 3 → 1
-                    (Union)
-                      (Aggregating)
-                      Resize 4 → 1
-                        AggregatingTransform × 4
-                          StrictResize 4 → 4
-                            (Expression)
-                            ExpressionTransform × 4
-                              (ReadFromMergeTree)
-                              MergeTreeThread × 4 0 → 1
-                      (ReadFromRemoteParallelReplicas)
+              Resize 1 → 4
+                ChooseMergingAlgorithmTransform 3 → 1
+                  (Union)
+                    (Aggregating)
+                    AggregatingTransform
+                      (Expression)
+                      ExpressionTransform
+                        (ReadFromMergeTree)
+                        MergeTreeInOrder 0 → 1
+                    (ReadFromRemoteParallelReplicas)
 select a, count() from dist_pr_t group by a order by a limit 5 offset 500;
-500	1000
-501	1000
-502	1000
-503	1000
-504	1000
+500	10
+501	10
+502	10
+503	10
+504	10
 select a, count() from dist_pr_t group by a, b order by a limit 5 offset 500;
-500	1000
-501	1000
-502	1000
-503	1000
-504	1000
+500	10
+501	10
+502	10
+503	10
+504	10
 0	3
 1	3
+0	1
+1	1
+2	1
+3	1
+4	1
+5	1
+6	1
+7	1
+8	1
+9	1
+10	1
+
+0	100
+0	2
+1	2
+2	2
+3	2
+4	2
+5	2
+6	2
+7	2
+8	2
+9	2
+10	2
+
+0	200
+0
+1
+2
+3
+4
+5
+6
+7
+8
+9

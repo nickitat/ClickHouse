@@ -3,6 +3,7 @@
 #include <IO/ReadBufferFromFile.h>
 #include <Interpreters/Aggregator.h>
 #include <Processors/IAccumulatingTransform.h>
+#include <Poco/Logger.h>
 #include <Common/Stopwatch.h>
 #include <Common/setThreadName.h>
 #include <Common/scope_guard_safe.h>
@@ -23,7 +24,7 @@ public:
 
     bool is_overflows = false;
     Int32 bucket_num = -1;
-    bool is_bucket_sorted = false;
+    bool is_bucket_sorted = false; // it will be sorted during writing on disk if memory bound merging is enabled
     UInt64 chunk_num = 0; // chunk number in order of generation, used during memory bound merging to restore chunks order
 };
 
@@ -89,6 +90,11 @@ struct ManyAggregatedData
         {
             if (variants.size() <= 1)
                 return;
+
+            std::string sizes;
+            for (auto & variant : variants)
+                sizes += fmt::format("{}, ", variant->size());
+            LOG_DEBUG(&Poco::Logger::get("debug"), "variants.size()={}, sizes={}", variants.size(), sizes);
 
             // Aggregation states destruction may be very time-consuming.
             // In the case of a query with LIMIT, most states won't be destroyed during conversion to blocks.

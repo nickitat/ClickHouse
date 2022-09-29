@@ -962,6 +962,7 @@ public:
         StatsCollectingParams stats_collecting_params;
 
         /// Used for memory bound merging.
+        bool memory_bound_merging_enabled;
         SortDescription sort_description;
 
         Params(
@@ -983,6 +984,7 @@ public:
             bool enable_prefetch_,
             bool only_merge_, // true for projections
             const StatsCollectingParams & stats_collecting_params_ = {},
+            bool memory_bound_merging_enabled_ = false,
             SortDescription sort_description_ = {})
             : keys(keys_)
             , aggregates(aggregates_)
@@ -1004,6 +1006,7 @@ public:
             , only_merge(only_merge_)
             , enable_prefetch(enable_prefetch_)
             , stats_collecting_params(stats_collecting_params_)
+            , memory_bound_merging_enabled(memory_bound_merging_enabled_)
             , sort_description(sort_description_)
         {
         }
@@ -1071,6 +1074,7 @@ public:
 
     /** Split block with partially-aggregated data to many blocks, as if two-level method of aggregation was used.
       * This is needed to simplify merging of that data with other results, that are already two-level.
+      * Result size equal to number of buckets, blocks go in order of bucket number.
       */
     std::vector<Block> convertBlockToTwoLevel(const Block & block) const;
 

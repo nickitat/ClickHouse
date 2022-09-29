@@ -18,6 +18,21 @@ ExpressionTransform × 4
                       (ReadFromMergeTree)
                       MergeTreeInOrder × 4 0 → 1
           (ReadFromRemote)
+explain sorting=1 select a from remote(test_cluster_two_shards, currentDatabase(), t) group by a;
+Expression ((Projection + Before ORDER BY))
+Sorting (None)
+  MergingAggregated
+  Sorting (None)
+    Union
+    Sorting (None)
+      Aggregating
+      Sorting (Global): a ASC
+        Expression (Before GROUP BY)
+        Sorting (Chunk): a ASC
+          ReadFromMergeTree (default.t)
+          Sorting (Stream): a ASC
+      ReadFromRemote (Read from remote replica)
+      Sorting (Global): a ASC
 select a from remote(test_cluster_two_shards, currentDatabase(), t) group by a order by a limit 5 offset 100500;
 100500
 100501
@@ -50,6 +65,27 @@ ExpressionTransform × 4
                                 MergeTreeInOrder × 4 0 → 1
                     (ReadFromRemote)
           (ReadFromRemote)
+explain sorting=1 select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group by a;
+Expression ((Projection + Before ORDER BY))
+Sorting (None)
+  MergingAggregated
+  Sorting (None)
+    Union
+    Sorting (None)
+      MergingAggregated
+      Sorting (Global): a ASC
+        Union
+        Sorting (None)
+          Aggregating
+          Sorting (Global): a ASC
+            Expression (Before GROUP BY)
+            Sorting (Chunk): a ASC
+              ReadFromMergeTree (default.t)
+              Sorting (Stream): a ASC
+          ReadFromRemote (Read from remote replica)
+          Sorting (Global): a ASC
+      ReadFromRemote (Read from remote replica)
+      Sorting (Global): a ASC
 select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group by a order by a limit 5 offset 100500;
 100500
 100501
