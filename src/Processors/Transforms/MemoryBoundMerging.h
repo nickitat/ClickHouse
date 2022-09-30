@@ -16,6 +16,161 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
+namespace detail
+{
+
+    inline const AggregatedChunkInfo * getInfoFromChunk(const Chunk & chunk)
+    {
+        const auto & info = chunk.getChunkInfo();
+        if (!info)
+            throw Exception("Chunk info was not set for chunk.", ErrorCodes::LOGICAL_ERROR);
+
+        const auto * agg_info = typeid_cast<const AggregatedChunkInfo *>(info.get());
+        if (!agg_info)
+            throw Exception("Chunk should have AggregatedChunkInfo.", ErrorCodes::LOGICAL_ERROR);
+
+        return agg_info;
+    }
+}
+
+
+///
+class ChooseMergingAlgorithmTransform : public IProcessor
+{
+public:
+    explicit ChooseMergingAlgorithmTransform(const Block & header_, size_t num_inputs_)
+        : IProcessor(InputPorts(num_inputs_, header_), {}), num_inputs(num_inputs_), read_chunks(num_inputs_)
+    {
+    }
+
+    String getName() const override { return "ChooseMergingAlgorithmTransform"; }
+
+
+    void work() override { }
+
+    IProcessor::Status prepare() override
+    {
+        /// Read first time from each input to understand if we have two-level aggregation.
+        if (!read_from_all_inputs)
+        {
+            readFromAllInputs();
+            if (!read_from_all_inputs)
+                return Status::NeedData;
+        }
+
+        /// Check if merging processors were already created.
+        if (outputs.empty())
+            createProcessors();
+
+        if (!processors.empty())
+            return IProcessor::Status::ExpandPipeline;
+
+        if (outputs.empty())
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "outputs.empty() == true");
+
+        auto in = inputs.begin();
+        auto out = outputs.begin();
+
+        bool need_data = false;
+
+        for (size_t i = 0; i < num_inputs; ++i, ++in, ++out)
+        {
+            if (in->isFinished())
+                continue;
+
+            if (out->isFinished())
+                in->close();
+
+            if (!out->canPush())
+                continue;
+
+            in->setNeeded();
+            if (!in->hasData())
+            {
+                need_data = true;
+                continue;
+            }
+
+            if (!read_chunks[i].empty())
+            {
+                out->push(std::move(read_chunks[i]));
+                read_chunks[i] = Chunk{};
+            }
+            else
+            {
+                auto chunk = in->pull();
+                out->push(std::move(chunk));
+            }
+        }
+
+        return need_data ? Status::NeedData : Status::Finished;
+    }
+
+
+private:
+    void readFromAllInputs()
+    {
+        auto in = inputs.begin();
+        auto out = outputs.begin();
+        read_from_all_inputs = true;
+
+        for (size_t i = 0; i < num_inputs; ++i, ++in, ++out)
+        {
+            if (in->isFinished())
+                continue;
+
+            if (read_from_input[i])
+                continue;
+
+            in->setNeeded();
+
+            if (!in->hasData())
+            {
+                read_from_all_inputs = false;
+                continue;
+            }
+
+            auto chunk = in->pull();
+            read_from_input[i] = true;
+            processChunk(std::move(chunk), i);
+        }
+    }
+
+    void processChunk(Chunk chunk, size_t input)
+    {
+        if (!chunk.hasRows())
+            return;
+
+        const auto * info = detail::getInfoFromChunk(chunk);
+        Int32 bucket = info->bucket_num;
+        bool is_overflows = info->is_overflows;
+
+        if (!is_overflows && bucket == -1)
+            some_input_has_single_level_chunks = true;
+
+        if (info->is_bucket_sorted)
+            some_input_has_sorted_chunk = true;
+
+        read_chunks[input] = std::move(chunk);
+    }
+
+    void createProcessors() { }
+
+    size_t num_inputs;
+
+    bool some_input_has_single_level_chunks = false;
+    bool some_input_has_sorted_chunk = false;
+
+    ///
+    Processors processors;
+
+    ///
+    Chunks read_chunks;
+
+    bool read_from_all_inputs = false;
+    std::vector<bool> read_from_input;
+};
+
 
 /// Has several inputs and single output.
 /// Read from inputs merged buckets with aggregated data, sort them by bucket number and block number.
@@ -23,7 +178,7 @@ namespace ErrorCodes
 class SortingAggregatedForMemoryBoundMergingTransform : public IProcessor
 {
 public:
-    explicit SortingAggregatedForMemoryBoundMergingTransform(const Block & header_, size_t num_inputs_)
+    explicit SortingAggregatedForMemoryBoundMergingTransform(const Block & header_, size_t num_inputs_, SortDescription)
         : IProcessor(InputPorts(num_inputs_, header_), {header_})
         , header(header_)
         , num_inputs(num_inputs_)
