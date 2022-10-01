@@ -2454,7 +2454,7 @@ void InterpreterSelectQuery::executeAggregation(QueryPlan & query_plan, const Ac
             settings.max_bytes_before_remerge_sort,
             settings.remerge_sort_lowered_memory_bytes_ratio,
             settings.max_bytes_before_external_sort,
-            context->getTemporaryVolume(),
+            context->getTempDataOnDisk(),
             settings.min_free_disk_space_for_temporary_data,
             settings.optimize_sorting_by_input_stream_properties);
         sorting_step->setStepDescription("Enforced sorting for aggregation in order");
