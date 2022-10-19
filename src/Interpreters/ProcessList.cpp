@@ -215,7 +215,7 @@ ProcessList::EntryPtr ProcessList::insert(const String & query_, const IAST * as
             if (user_process_list.user_temp_data_on_disk)
             {
                 query_context->setTempDataOnDisk(std::make_shared<TemporaryDataOnDiskScope>(
-                    user_process_list.user_temp_data_on_disk, settings.max_temp_data_on_disk_size_for_query));
+                    user_process_list.user_temp_data_on_disk, settings.max_temporary_data_on_disk_size_for_query));
             }
             thread_group->query = query_;
             thread_group->one_line_query = toOneLineQuery(query_);
@@ -533,7 +533,7 @@ QueryStatusInfo QueryStatus::getInfo(bool get_thread_list, bool get_profile_even
         if (get_thread_list)
         {
             std::lock_guard lock(thread_group->mutex);
-            res.thread_ids = thread_group->thread_ids;
+            res.thread_ids.assign(thread_group->thread_ids.begin(), thread_group->thread_ids.end());
         }
 
         if (get_profile_events)
@@ -575,7 +575,7 @@ ProcessListForUser::ProcessListForUser(ContextPtr global_context, ProcessList * 
 
     if (global_context)
     {
-        size_t size_limit = global_context->getSettingsRef().max_temp_data_on_disk_size_for_user;
+        size_t size_limit = global_context->getSettingsRef().max_temporary_data_on_disk_size_for_user;
         user_temp_data_on_disk = std::make_shared<TemporaryDataOnDiskScope>(global_context->getTempDataOnDisk(), size_limit);
     }
 }
