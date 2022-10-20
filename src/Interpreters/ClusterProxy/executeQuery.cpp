@@ -14,7 +14,6 @@
 #include <Processors/QueryPlan/QueryPlan.h>
 #include <Processors/QueryPlan/ReadFromRemote.h>
 #include <Processors/QueryPlan/UnionStep.h>
-#include <QueryPipeline/Pipe.h>
 #include <Storages/SelectQueryInfo.h>
 
 using namespace DB;
