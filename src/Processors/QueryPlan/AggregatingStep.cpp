@@ -128,10 +128,10 @@ AggregatingStep::AggregatingStep(
     , should_produce_results_in_order_of_bucket_number(should_produce_results_in_order_of_bucket_number_)
     , memory_bound_merging_of_aggregation_results_enabled(memory_bound_merging_of_aggregation_results_enabled_)
 {
-    if (memoryBoundMergingWillBeUsed())
+    if (memoryBoundMergingWillBeUsed() && group_by_info)
     {
         output_stream->sort_description = group_by_sort_description;
-        output_stream->sort_scope = !group_by_info ? DataStream::SortScope::Bucket : DataStream::SortScope::Global;
+        output_stream->sort_scope = DataStream::SortScope::Global;
     }
 }
 
@@ -495,7 +495,10 @@ void AggregatingStep::adjustSettingsToEnforceSortingPropertiesInDistributedQuery
         context->setSetting("force_aggregation_in_order", true);
     }
     else
+    {
+        /// If remote node will choose aggregation in order, we will need to convert
         context->setSetting("optimize_aggregation_in_order", false);
+    }
 }
 
 bool AggregatingStep::memoryBoundMergingWillBeUsed() const

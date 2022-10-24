@@ -32,19 +32,21 @@ select max(bs) < 70000 from (select avg(a), max(blockSize()) as bs from remote(t
 
 -- beautiful case when we have different sorting key definitions in tables involved in distributed query => different plans => different sorting properties of local aggregation results --
 create database if not exists shard_1;
-create table t_different_dbs(a UInt64, b UInt64) engine = MergeTree order by a;
-create table shard_1.t_different_dbs(a UInt64, b UInt64) engine = MergeTree order by tuple();
+create table t_different_dbs(a UInt8, b UInt8) engine = MergeTree order by a;
+create table shard_1.t_different_dbs(a UInt32, b UInt32) engine = MergeTree order by tuple();
 
 insert into t_different_dbs select number % 1000, number % 1000 from numbers_mt(1e6);
 insert into shard_1.t_different_dbs select number % 1000, number % 1000 from numbers_mt(1e6);
 
+set group_by_two_level_threshold = 1;
+set enable_memory_bound_merging_of_aggregation_results = 1;
 create table dist_t_different_dbs as t engine = Distributed(test_cluster_two_shards_different_databases_with_local, '', t_different_dbs);
 
 -- { echoOn } --
 explain pipeline select a, count() from dist_t_different_dbs group by a order by a limit 5 offset 500;
 
 select a, count() from dist_t_different_dbs group by a order by a limit 5 offset 500;
-select a, count() from dist_t_different_dbs group by a, b order by a limit 5 offset 500;
+select a, b, count() from dist_t_different_dbs group by a, b order by a limit 5 offset 500;
 
 -- { echoOff } --
 

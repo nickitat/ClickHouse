@@ -2691,7 +2691,7 @@ ManyAggregatedDataVariants Aggregator::prepareVariantsToMerge(ManyAggregatedData
     bool has_at_least_one_two_level = false;
 
     /// We force conversion to two-level to not deal with single-level HT during memory bound merging.
-    /// If it is not convertible it won't be a problem, since group by key == HT type will be equal on all nodes.
+    /// todo: fixme, I don't work in general
     if (params.memory_bound_merging_enabled && non_empty_data.front()->isConvertibleToTwoLevel())
         has_at_least_one_two_level = true;
 
