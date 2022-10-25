@@ -496,7 +496,8 @@ void AggregatingStep::adjustSettingsToEnforceSortingPropertiesInDistributedQuery
     }
     else
     {
-        /// If remote node will choose aggregation in order, we will need to convert
+        /// If remote node will choose aggregation in order, we will need to convert blocks with it's data to two-level HT.
+        /// Let's avoid this work by telling it to not use aggregation in order.
         context->setSetting("optimize_aggregation_in_order", false);
     }
 }

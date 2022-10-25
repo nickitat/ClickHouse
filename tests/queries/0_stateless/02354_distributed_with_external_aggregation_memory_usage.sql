@@ -1,5 +1,7 @@
 -- Tags: long, no-tsan, no-msan, no-asan, no-ubsan, no-debug, no-s3-storage
 
+set enable_memory_bound_merging_of_aggregation_results = 0; -- todo
+
 create table t_2354_dist_with_external_aggr(a UInt64, b String, c FixedString(100)) engine = MergeTree order by tuple();
 
 insert into t_2354_dist_with_external_aggr select number, toString(number) as s, toFixedString(s, 100) from numbers_mt(5e7);

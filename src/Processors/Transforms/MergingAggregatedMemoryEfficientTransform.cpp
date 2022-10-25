@@ -367,8 +367,6 @@ void MergingAggregatedBucketTransform::transform(Chunk & chunk)
 
     size_t num_rows = block.rows();
     chunk.setColumns(block.getColumns(), num_rows);
-
-    LOG_DEBUG(&Poco::Logger::get("debug"), "MergingAggregatedBucketTransform {}", chunk.hasChunkInfo());
 }
 
 

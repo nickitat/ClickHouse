@@ -22,7 +22,7 @@ public:
 
     bool is_overflows = false;
     Int32 bucket_num = -1;
-    bool is_bucket_sorted = false;
+    bool is_bucket_sorted = false; // it will be sorted during writing on disk if memory bound merging is enabled
     UInt64 chunk_num = 0; // chunk number in order of generation, used during memory bound merging to restore chunks order
 };
 
