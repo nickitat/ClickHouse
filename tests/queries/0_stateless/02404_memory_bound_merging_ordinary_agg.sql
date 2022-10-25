@@ -1,4 +1,4 @@
--- Tags: long, no-parallel
+-- Tags: no-parallel
 
 create table t(a UInt64, b UInt64) engine=MergeTree order by a;
 system stop merges t;
@@ -19,9 +19,13 @@ create table dist_t as t engine = Distributed(test_cluster_two_shards, currentDa
 -- { echoOn } --
 explain pipeline select a from remote(test_cluster_two_shards, currentDatabase(), t) group by a;
 
+explain sorting=1 select a from remote(test_cluster_two_shards, currentDatabase(), t) group by a;
+
 select a from remote(test_cluster_two_shards, currentDatabase(), t) group by a order by a limit 5 offset 100500;
 
 explain pipeline select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group by a;
+
+explain sorting=1 select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group by a;
 
 select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group by a order by a limit 5 offset 100500;
 
@@ -95,3 +99,4 @@ create table t4(a UInt8) engine=MergeTree order by a settings index_granularity 
 insert into t4 select * from numbers_mt(100);
 select a, count() from t4 group by a with totals order by a settings max_rows_to_group_by = 10, group_by_overflow_mode = 'any', max_block_size = 1, totals_mode = 'before_having';
 select a, count() as c from remote('127.0.0.{1,2}', currentDatabase(), t4) group by a with totals order by a, c settings max_rows_to_group_by = 10, group_by_overflow_mode = 'any', max_block_size = 1, totals_mode = 'before_having';
+

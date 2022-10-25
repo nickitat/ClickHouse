@@ -3308,6 +3308,8 @@ void Aggregator::destroyAllAggregateStates(AggregatedDataVariants & result) cons
     if (result.empty())
         return;
 
+    LOG_DEBUG(log, "destroyAllAggregateStates, result_size={}", result.size());
+
     /// In what data structure is the data aggregated?
     if (result.type == AggregatedDataVariants::Type::without_key || params.overflow_row)
         destroyWithoutKey(result);

@@ -3,6 +3,7 @@
 #include <IO/ReadBufferFromFile.h>
 #include <Interpreters/Aggregator.h>
 #include <Processors/IAccumulatingTransform.h>
+#include <Poco/Logger.h>
 #include <Common/Stopwatch.h>
 #include <Common/setThreadName.h>
 
@@ -88,6 +89,11 @@ struct ManyAggregatedData
         {
             if (variants.size() <= 1)
                 return;
+
+            std::string sizes;
+            for (auto & variant : variants)
+                sizes += fmt::format("{}, ", variant->size());
+            LOG_DEBUG(&Poco::Logger::get("debug"), "variants.size()={}, sizes={}", variants.size(), sizes);
 
             // Aggregation states destruction may be very time-consuming.
             // In the case of a query with LIMIT, most states won't be destroyed during conversion to blocks.
