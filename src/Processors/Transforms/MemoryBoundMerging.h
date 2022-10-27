@@ -34,23 +34,27 @@ namespace detail
 }
 
 
-///
+/// In case of distributed aggregation we don't know which aggregation algorithm a remote node will choose.
+/// In theory we could receive all types of buckets for merge: single-level, two-level unsorted, two-level sorted (if external memory bound aggregation took place).
+/// This transform analyzes input buckets, chooses merging algorithm and sort unsorted buckets if needed.
 class ChooseMergingAlgorithmTransform : public IProcessor
 {
 public:
     explicit ChooseMergingAlgorithmTransform(const Block & header_, size_t num_inputs_)
-        : IProcessor(InputPorts(num_inputs_, header_), {}), num_inputs(num_inputs_), read_chunks(num_inputs_)
+        : IProcessor(InputPorts(num_inputs_, header_), OutputPorts(num_inputs_, header_))
+        , num_inputs(num_inputs_)
+        , read_chunks(num_inputs)
+        , read_from_input(num_inputs, false)
     {
     }
 
     String getName() const override { return "ChooseMergingAlgorithmTransform"; }
 
-
     void work() override { }
 
     IProcessor::Status prepare() override
     {
-        /// Read first time from each input to understand if we have two-level aggregation.
+        /// Read first time from each input to understand what kinds of buckets do we have.
         if (!read_from_all_inputs)
         {
             readFromAllInputs();
@@ -66,28 +70,33 @@ public:
             return IProcessor::Status::ExpandPipeline;
 
         if (outputs.empty())
-            throw Exception(ErrorCodes::LOGICAL_ERROR, "outputs.empty() == true");
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "No output ports created");
+
+        /// Output ports (i.e. actual merging transforms) were already created. Here we just forward input chunks to them.
 
         auto in = inputs.begin();
         auto out = outputs.begin();
 
         bool need_data = false;
+        bool all_finished = true;
+        bool pushed_something = false;
 
         for (size_t i = 0; i < num_inputs; ++i, ++in, ++out)
         {
-            if (in->isFinished())
-                continue;
+            // LOG_DEBUG(&Poco::Logger::get("debug"), "i={}", i);
 
             if (out->isFinished())
+            {
+                // LOG_DEBUG(&Poco::Logger::get("debug"), "out->isFinished()");
                 in->close();
+            }
+
+            all_finished &= in->isFinished();
 
             if (!out->canPush())
-                continue;
-
-            in->setNeeded();
-            if (!in->hasData())
             {
-                need_data = true;
+                in->setNotNeeded();
+                // LOG_DEBUG(&Poco::Logger::get("debug"), "!out->canPush()");
                 continue;
             }
 
@@ -95,26 +104,51 @@ public:
             {
                 out->push(std::move(read_chunks[i]));
                 read_chunks[i] = Chunk{};
+                continue;
             }
-            else
+
+            if (in->isFinished())
             {
-                auto chunk = in->pull();
-                out->push(std::move(chunk));
+                out->finish();
+                // LOG_DEBUG(&Poco::Logger::get("debug"), "in->isFinished()");
+                continue;
             }
+
+            in->setNeeded();
+            if (!in->hasData())
+            {
+                // LOG_DEBUG(&Poco::Logger::get("debug"), "!in->hasData()");
+                need_data = true;
+                continue;
+            }
+
+            // LOG_DEBUG(&Poco::Logger::get("debug"), "pull from i={}", i);
+
+            auto chunk = in->pull();
+            out->push(std::move(chunk));
+
+            pushed_something = true;
         }
 
-        return need_data ? Status::NeedData : Status::Finished;
-    }
+        // LOG_DEBUG(&Poco::Logger::get("debug"), "need_data={}, all_finished={}, pushed_something={}", need_data, all_finished, pushed_something);
 
+        if (all_finished)
+        {
+            for (auto & output : outputs)
+                output.finish();
+            return Status::Finished;
+        }
+
+        return need_data ? Status::NeedData : pushed_something ? Status::Ready : Status::PortFull;
+    }
 
 private:
     void readFromAllInputs()
     {
         auto in = inputs.begin();
-        auto out = outputs.begin();
         read_from_all_inputs = true;
 
-        for (size_t i = 0; i < num_inputs; ++i, ++in, ++out)
+        for (size_t i = 0; i < num_inputs; ++i, ++in)
         {
             if (in->isFinished())
                 continue;
@@ -131,7 +165,6 @@ private:
             }
 
             auto chunk = in->pull();
-            read_from_input[i] = true;
             processChunk(std::move(chunk), i);
         }
     }
@@ -142,16 +175,15 @@ private:
             return;
 
         const auto * info = detail::getInfoFromChunk(chunk);
-        Int32 bucket = info->bucket_num;
-        bool is_overflows = info->is_overflows;
 
-        if (!is_overflows && bucket == -1)
+        if (!info->is_overflows && info->bucket_num == -1)
             some_input_has_single_level_chunks = true;
 
         if (info->is_bucket_sorted)
             some_input_has_sorted_chunk = true;
 
         read_chunks[input] = std::move(chunk);
+        read_from_input[input] = true;
     }
 
     void createProcessors() { }

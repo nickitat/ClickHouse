@@ -100,3 +100,8 @@ insert into t4 select * from numbers_mt(100);
 select a, count() from t4 group by a with totals order by a settings max_rows_to_group_by = 10, group_by_overflow_mode = 'any', max_block_size = 1, totals_mode = 'before_having';
 select a, count() as c from remote('127.0.0.{1,2}', currentDatabase(), t4) group by a with totals order by a, c settings max_rows_to_group_by = 10, group_by_overflow_mode = 'any', max_block_size = 1, totals_mode = 'before_having';
 
+-- temporary --
+
+create table t5(a UInt32, b UInt32) engine=MergeTree order by a settings index_granularity = 1;
+insert into t5 select number, number from numbers_mt(10);
+select a from t5 group by a order by a settings max_bytes_before_external_group_by = 1, group_by_two_level_threshold = 1;

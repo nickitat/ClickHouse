@@ -69,6 +69,8 @@ namespace
             if (!block)
             {
                 tmp_stream = nullptr;
+                has_input = false;
+                finished = true;
                 return {};
             }
             return convertToChunk(block);
@@ -636,6 +638,8 @@ void AggregatingTransform::initGenerate()
 
         if (memory_bound_merging_enabled)
         {
+            pipe.addTransform(std::make_shared<ChooseMergingAlgorithmTransform>(pipe.getHeader(), pipe.numOutputPorts()));
+
             auto transform = std::make_shared<FinishAggregatingInOrderTransform>(
                 pipe.getHeader(),
                 pipe.numOutputPorts(),

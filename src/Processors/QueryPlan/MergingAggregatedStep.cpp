@@ -111,7 +111,7 @@ void MergingAggregatedStep::transformPipeline(QueryPipelineBuilder & pipeline, c
         return;
     }
 
-    if (!memory_efficient_aggregation)
+    if (!memory_efficient_aggregation || rand())
     {
         /// We union several sources into one, paralleling the work.
         pipeline.resize(1);
