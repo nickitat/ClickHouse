@@ -283,12 +283,33 @@ public:
         if (!processors.empty())
             return IProcessor::Status::ExpandPipeline;
 
-        if (outputs.size() != num_inputs)
+        if (outputs.size() != num_inputs + 1)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "No output ports created");
+
+        auto & merged_input = inputs.back();
+        auto & merged_output = outputs.front();
+        if (merged_output.canPush())
+        {
+            if (merged_input.hasData())
+            {
+                auto chunk = merged_input.pull();
+                merged_output.push(std::move(chunk));
+            }
+            else
+            {
+                merged_input.setNeeded();
+            }
+        }
+        else if (merged_output.isFinished())
+        {
+            merged_input.close();
+        }
+        if (merged_input.isFinished())
+            merged_output.finish();
 
         /// Output ports (i.e. actual merging transforms) were already created. Here we just forward input chunks to them.
         auto in = inputs.begin();
-        auto out = outputs.begin();
+        auto out = std::next(outputs.begin());
 
         bool need_data = false;
         bool all_finished = true;
@@ -327,7 +348,7 @@ public:
             if (!out->canPush())
             {
                 in->setNotNeeded();
-                LOG_DEBUG(&Poco::Logger::get("debug"), "i={} !out->canPush()", i);
+                // LOG_DEBUG(&Poco::Logger::get("debug"), "i={} !out->canPush()", i);
                 continue;
             }
 
@@ -348,9 +369,9 @@ public:
 
             auto chunk = in->pull();
 
-            const auto & info = detail::getInfoFromChunk(chunk);
-            last_bucket_number[i] = info->bucket_num;
-            LOG_DEBUG(&Poco::Logger::get("debug"), "pull from i={}, bucket_id={}, chunk_num={}", i, info->bucket_num, info->chunk_num);
+            // const auto & info = detail::getInfoFromChunk(chunk);
+            // last_bucket_number[i] = info->bucket_num;
+            // LOG_DEBUG(&Poco::Logger::get("debug"), "pull from i={}, bucket_id={}, chunk_num={}", i, info->bucket_num, info->chunk_num);
 
             out->push(std::move(chunk));
 
@@ -359,10 +380,11 @@ public:
 
         // LOG_DEBUG(&Poco::Logger::get("debug"), "need_data={}, all_finished={}, pushed_something={}", need_data, all_finished, pushed_something);
 
-        if (all_finished)
+        if (all_finished && merged_input.isFinished())
         {
-            for (auto & output : outputs)
-                output.finish();
+            auto outp = std::next(outputs.begin());
+            for (; outp != outputs.end(); ++outp)
+                outp->finish();
             return Status::Finished;
         }
 
@@ -436,7 +458,11 @@ private:
 
         Pipe pipe{std::make_shared<GroupingAggregatedTransform>(header, num_inputs, params)};
 
-        pipe.addTransform(std::make_shared<MergingAggregatedBucketTransform>(params));
+        pipe.resize(num_inputs);
+
+        pipe.addSimpleTransform([this](const Block &) { return std::make_shared<MergingAggregatedBucketTransform>(params); });
+
+        pipe.addTransform(std::make_shared<SortingAggregatedTransform>(num_inputs, params));
 
         processors = Pipe::detachProcessors(std::move(pipe));
 
@@ -454,9 +480,11 @@ private:
         if (outputs.size() != 1 || processors.back()->getOutputs().size() != 1)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "oops");
 
-        LOG_DEBUG(&Poco::Logger::get("debug"), "merging output directed to {}", static_cast<const void *>(&outputs.front().getInputPort()));
+        // LOG_DEBUG(&Poco::Logger::get("debug"), "merging output directed to {}", static_cast<const void *>(&outputs.front().getInputPort()));
 
-        connect(processors.back()->getOutputs().front(), outputs.front().getInputPort(), true);
+        /// We create new input in the current transform;
+        inputs.emplace_back(header, this);
+        connect(processors.back()->getOutputs().front(), inputs.back(), true);
 
         /// Connect our outputs with merging inputs.
         auto & merging_inputs = processors.front()->getInputs();
@@ -464,7 +492,7 @@ private:
         if (merging_inputs.size() != num_inputs)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "oops");
 
-        outputs.clear();
+        // outputs.clear();
         for (auto & in : merging_inputs)
         {
             outputs.emplace_back(header, this);

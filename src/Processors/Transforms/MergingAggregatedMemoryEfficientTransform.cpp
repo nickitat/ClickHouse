@@ -142,7 +142,7 @@ IProcessor::Status GroupingAggregatedTransform::prepare()
             return Status::NeedData;
     }
 
-    LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform read_from_all_inputs");
+    // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform read_from_all_inputs");
 
     /// Convert single level to two levels if have two-level input.
     if (has_two_level && !single_level_chunks.empty())
@@ -151,12 +151,10 @@ IProcessor::Status GroupingAggregatedTransform::prepare()
     /// Check can push (to avoid data caching).
     if (!output.canPush())
     {
-        size_t i = 0;
         for (auto & input : inputs)
         {
-            LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform input {} setNotNeeded()", i);
+            // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform input {} setNotNeeded()", i);
             input.setNotNeeded();
-            i++;
         }
 
         return Status::PortFull;
@@ -185,7 +183,7 @@ IProcessor::Status GroupingAggregatedTransform::prepare()
         auto in = inputs.begin();
         for (size_t input_num = 0; input_num < num_inputs; ++input_num, ++in)
         {
-            LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform input {}", input_num);
+            // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform input {}", input_num);
 
             if (in->isFinished())
                 continue;
@@ -194,20 +192,20 @@ IProcessor::Status GroupingAggregatedTransform::prepare()
 
             if (!need_input(input_num))
             {
-                LOG_DEBUG(
+                /*LOG_DEBUG(
                     &Poco::Logger::get("debug"),
                     "GroupingAggregatedTransform !need_input last_bucket_number {} current_bucket_num {}",
                     last_bucket_number[input_num],
-                    current_bucket);
+                    current_bucket);*/
                 continue;
             }
 
             in->setNeeded();
-            LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform setNeeded() input_num {}", input_num);
+            // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform setNeeded() input_num {}", input_num);
 
             if (!in->hasData())
             {
-                LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform !in->hasData()");
+                // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform !in->hasData()");
                 need_data = true;
                 continue;
             }
@@ -220,7 +218,7 @@ IProcessor::Status GroupingAggregatedTransform::prepare()
 
             if (!in->isFinished() && need_input(input_num))
             {
-                LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform !in->isFinished() && need_input(input_num)");
+                // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform !in->isFinished() && need_input(input_num)");
                 need_data = true;
             }
         }
@@ -281,7 +279,7 @@ void GroupingAggregatedTransform::addChunk(Chunk chunk, size_t input)
         Int32 bucket = agg_info->bucket_num;
         bool is_overflows = agg_info->is_overflows;
 
-        LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform addChunk input {} bucket_num {}", input, bucket);
+        // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform addChunk input {} bucket_num {}", input, bucket);
 
         if (is_overflows)
             overflow_chunks.emplace_back(std::move(chunk));

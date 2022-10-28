@@ -436,7 +436,7 @@ IProcessor::Status AggregatingTransform::prepare()
 
     if (!output.canPush())
     {
-        LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform !output.canPush()");
+        // LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform !output.canPush()");
         input.setNotNeeded();
         return Status::PortFull;
     }
@@ -475,7 +475,7 @@ IProcessor::Status AggregatingTransform::prepare()
 
     if (!input.hasData())
     {
-        LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform !input.hasData()");
+        // LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform !input.hasData()");
 
         input.setNeeded();
         return Status::NeedData;
@@ -483,7 +483,7 @@ IProcessor::Status AggregatingTransform::prepare()
 
     if (is_consume_finished)
     {
-        LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform is_consume_finished setNeeded()");
+        // LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform is_consume_finished setNeeded()");
         input.setNeeded();
     }
 
@@ -492,7 +492,7 @@ IProcessor::Status AggregatingTransform::prepare()
 
     if (is_consume_finished)
     {
-        LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform is_consume_finished output.push()");
+        // LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform is_consume_finished output.push()");
         output.push(std::move(current_chunk));
         read_current_chunk = false;
         return Status::PortFull;
@@ -519,7 +519,7 @@ Processors AggregatingTransform::expandPipeline()
     auto & out = processors.back()->getOutputs().front();
     inputs.emplace_back(out.getHeader(), this);
 
-    LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransfor new input {}", static_cast<const void *>(&inputs.back()));
+    // LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransfor new input {}", static_cast<const void *>(&inputs.back()));
 
     connect(out, inputs.back());
     is_pipeline_created = true;

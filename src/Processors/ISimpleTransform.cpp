@@ -18,7 +18,7 @@ ISimpleTransform::Status ISimpleTransform::prepare()
 {
     /// Check can output.
 
-    LOG_DEBUG(&Poco::Logger::get("debug"), "{} {}", getName(), static_cast<const void *>(this));
+    // LOG_DEBUG(&Poco::Logger::get("debug"), "{} {}", getName(), static_cast<const void *>(this));
 
     if (output.isFinished())
     {
@@ -28,8 +28,8 @@ ISimpleTransform::Status ISimpleTransform::prepare()
 
     if (!output.canPush())
     {
-        if (getName() == "MergingAggregatedBucketTransform")
-            LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} !output.canPush()", getName(), static_cast<const void *>(this));
+        // if (getName() == "MergingAggregatedBucketTransform")
+        //   LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} !output.canPush()", getName(), static_cast<const void *>(this));
         input.setNotNeeded();
         return Status::PortFull;
     }
@@ -37,15 +37,15 @@ ISimpleTransform::Status ISimpleTransform::prepare()
     /// Output if has data.
     if (has_output)
     {
-        if (getName() == "MergingAggregatedBucketTransform")
-            LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} has_output pushData()", getName(), static_cast<const void *>(this));
+        //if (getName() == "MergingAggregatedBucketTransform")
+        //LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} has_output pushData()", getName(), static_cast<const void *>(this));
         output.pushData(std::move(output_data));
         has_output = false;
 
         if (!no_more_data_needed)
         {
-            if (getName() == "MergingAggregatedBucketTransform")
-                LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} !no_more_data_needed", getName(), static_cast<const void *>(this));
+            // if (getName() == "MergingAggregatedBucketTransform")
+            // LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} !no_more_data_needed", getName(), static_cast<const void *>(this));
             return Status::PortFull;
         }
     }
@@ -68,16 +68,16 @@ ISimpleTransform::Status ISimpleTransform::prepare()
         }
 
         input.setNeeded();
-        if (getName() == "MergingAggregatedBucketTransform")
-            LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} !has_input setNeeded()", getName(), static_cast<const void *>(this));
+        // if (getName() == "MergingAggregatedBucketTransform")
+        // LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} !has_input setNeeded()", getName(), static_cast<const void *>(this));
 
         if (!input.hasData())
             return Status::NeedData;
 
         input_data = input.pullData(set_input_not_needed_after_read);
         has_input = true;
-        if (getName() == "MergingAggregatedBucketTransform")
-            LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} has_output pullData()", getName(), static_cast<const void *>(this));
+        // if (getName() == "MergingAggregatedBucketTransform")
+        // LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} has_output pullData()", getName(), static_cast<const void *>(this));
 
         if (input_data.exception)
             /// No more data needed. Exception will be thrown (or swallowed) later.
