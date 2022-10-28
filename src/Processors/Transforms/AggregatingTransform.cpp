@@ -3,10 +3,9 @@
 #include <Core/ProtocolDefines.h>
 #include <Formats/NativeReader.h>
 #include <Processors/ISource.h>
+#include <Processors/Transforms/MemoryBoundMerging.h>
 #include <Processors/Transforms/MergingAggregatedMemoryEfficientTransform.h>
 #include <QueryPipeline/Pipe.h>
-#include "Processors/Merges/FinishAggregatingInOrderTransform.h"
-#include "Processors/Transforms/MemoryBoundMerging.h"
 
 namespace ProfileEvents
 {
@@ -69,8 +68,6 @@ namespace
             if (!block)
             {
                 tmp_stream = nullptr;
-                has_input = false;
-                finished = true;
                 return {};
             }
             return convertToChunk(block);
@@ -439,6 +436,7 @@ IProcessor::Status AggregatingTransform::prepare()
 
     if (!output.canPush())
     {
+        LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform !output.canPush()");
         input.setNotNeeded();
         return Status::PortFull;
     }
@@ -477,18 +475,24 @@ IProcessor::Status AggregatingTransform::prepare()
 
     if (!input.hasData())
     {
+        LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform !input.hasData()");
+
         input.setNeeded();
         return Status::NeedData;
     }
 
     if (is_consume_finished)
+    {
+        LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform is_consume_finished setNeeded()");
         input.setNeeded();
+    }
 
     current_chunk = input.pull(/*set_not_needed = */ !is_consume_finished);
     read_current_chunk = true;
 
     if (is_consume_finished)
     {
+        LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransform is_consume_finished output.push()");
         output.push(std::move(current_chunk));
         read_current_chunk = false;
         return Status::PortFull;
@@ -514,6 +518,9 @@ Processors AggregatingTransform::expandPipeline()
         throw Exception("Can not expandPipeline in AggregatingTransform. This is a bug.", ErrorCodes::LOGICAL_ERROR);
     auto & out = processors.back()->getOutputs().front();
     inputs.emplace_back(out.getHeader(), this);
+
+    LOG_DEBUG(&Poco::Logger::get("debug"), "AggregatingTransfor new input {}", static_cast<const void *>(&inputs.back()));
+
     connect(out, inputs.back());
     is_pipeline_created = true;
     return std::move(processors);
@@ -636,33 +643,19 @@ void AggregatingTransform::initGenerate()
             ReadableSize(compressed_size),
             ReadableSize(uncompressed_size));
 
-        if (memory_bound_merging_enabled)
+        (void)memory_bound_merging_enabled;
+        pipe.addTransform(std::make_shared<ChooseMergingAlgorithmTransform>(
+            pipe.getHeader(), pipe.numOutputPorts(), params, max_block_bytes, temporary_data_merge_threads));
+
+        /*if (memory_bound_merging_enabled)
         {
-            pipe.addTransform(std::make_shared<ChooseMergingAlgorithmTransform>(pipe.getHeader(), pipe.numOutputPorts()));
-
-            auto transform = std::make_shared<FinishAggregatingInOrderTransform>(
-                pipe.getHeader(),
-                pipe.numOutputPorts(),
-                params,
-                params->params.sort_description,
-                params->params.max_block_size,
-                max_block_bytes);
-
-            pipe.addTransform(std::move(transform));
-
-            /// Do merge of aggregated data in parallel.
-            pipe.resize(temporary_data_merge_threads);
-
-            pipe.addSimpleTransform(
-                [&](const Block &) { return std::make_shared<MergingAggregatedBucketTransform>(params, params->params.sort_description); });
-
-            pipe.addTransform(std::make_shared<SortingAggregatedForMemoryBoundMergingTransform>(
-                pipe.getHeader(), pipe.numOutputPorts(), params->params.sort_description));
+            pipe.addTransform(std::make_shared<ChooseMergingAlgorithmTransform>(
+                pipe.getHeader(), pipe.numOutputPorts(), params, max_block_bytes, temporary_data_merge_threads));
         }
         else
         {
             addMergingAggregatedMemoryEfficientTransform(pipe, params, temporary_data_merge_threads);
-        }
+        }*/
 
         processors = Pipe::detachProcessors(std::move(pipe));
     }

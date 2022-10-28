@@ -1,9 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <Core/SortDescription.h>
 #include <Interpreters/sortBlock.h>
 #include <Processors/IProcessor.h>
+#include <Processors/Merges/FinishAggregatingInOrderTransform.h>
 #include <Processors/Transforms/AggregatingTransform.h>
+#include <Processors/Transforms/MergingAggregatedMemoryEfficientTransform.h>
+#include <QueryPipeline/Pipe.h>
 
 #include <Poco/Logger.h>
 #include <Common/logger_useful.h>
@@ -32,176 +36,6 @@ namespace detail
         return agg_info;
     }
 }
-
-
-/// In case of distributed aggregation we don't know which aggregation algorithm a remote node will choose.
-/// In theory we could receive all types of buckets for merge: single-level, two-level unsorted, two-level sorted (if external memory bound aggregation took place).
-/// This transform analyzes input buckets, chooses merging algorithm and sort unsorted buckets if needed.
-class ChooseMergingAlgorithmTransform : public IProcessor
-{
-public:
-    explicit ChooseMergingAlgorithmTransform(const Block & header_, size_t num_inputs_)
-        : IProcessor(InputPorts(num_inputs_, header_), OutputPorts(num_inputs_, header_))
-        , num_inputs(num_inputs_)
-        , read_chunks(num_inputs)
-        , read_from_input(num_inputs, false)
-    {
-    }
-
-    String getName() const override { return "ChooseMergingAlgorithmTransform"; }
-
-    void work() override { }
-
-    IProcessor::Status prepare() override
-    {
-        /// Read first time from each input to understand what kinds of buckets do we have.
-        if (!read_from_all_inputs)
-        {
-            readFromAllInputs();
-            if (!read_from_all_inputs)
-                return Status::NeedData;
-        }
-
-        /// Check if merging processors were already created.
-        if (outputs.empty())
-            createProcessors();
-
-        if (!processors.empty())
-            return IProcessor::Status::ExpandPipeline;
-
-        if (outputs.empty())
-            throw Exception(ErrorCodes::LOGICAL_ERROR, "No output ports created");
-
-        /// Output ports (i.e. actual merging transforms) were already created. Here we just forward input chunks to them.
-
-        auto in = inputs.begin();
-        auto out = outputs.begin();
-
-        bool need_data = false;
-        bool all_finished = true;
-        bool pushed_something = false;
-
-        for (size_t i = 0; i < num_inputs; ++i, ++in, ++out)
-        {
-            // LOG_DEBUG(&Poco::Logger::get("debug"), "i={}", i);
-
-            if (out->isFinished())
-            {
-                // LOG_DEBUG(&Poco::Logger::get("debug"), "out->isFinished()");
-                in->close();
-            }
-
-            all_finished &= in->isFinished();
-
-            if (!out->canPush())
-            {
-                in->setNotNeeded();
-                // LOG_DEBUG(&Poco::Logger::get("debug"), "!out->canPush()");
-                continue;
-            }
-
-            if (!read_chunks[i].empty())
-            {
-                out->push(std::move(read_chunks[i]));
-                read_chunks[i] = Chunk{};
-                continue;
-            }
-
-            if (in->isFinished())
-            {
-                out->finish();
-                // LOG_DEBUG(&Poco::Logger::get("debug"), "in->isFinished()");
-                continue;
-            }
-
-            in->setNeeded();
-            if (!in->hasData())
-            {
-                // LOG_DEBUG(&Poco::Logger::get("debug"), "!in->hasData()");
-                need_data = true;
-                continue;
-            }
-
-            // LOG_DEBUG(&Poco::Logger::get("debug"), "pull from i={}", i);
-
-            auto chunk = in->pull();
-            out->push(std::move(chunk));
-
-            pushed_something = true;
-        }
-
-        // LOG_DEBUG(&Poco::Logger::get("debug"), "need_data={}, all_finished={}, pushed_something={}", need_data, all_finished, pushed_something);
-
-        if (all_finished)
-        {
-            for (auto & output : outputs)
-                output.finish();
-            return Status::Finished;
-        }
-
-        return need_data ? Status::NeedData : pushed_something ? Status::Ready : Status::PortFull;
-    }
-
-private:
-    void readFromAllInputs()
-    {
-        auto in = inputs.begin();
-        read_from_all_inputs = true;
-
-        for (size_t i = 0; i < num_inputs; ++i, ++in)
-        {
-            if (in->isFinished())
-                continue;
-
-            if (read_from_input[i])
-                continue;
-
-            in->setNeeded();
-
-            if (!in->hasData())
-            {
-                read_from_all_inputs = false;
-                continue;
-            }
-
-            auto chunk = in->pull();
-            processChunk(std::move(chunk), i);
-        }
-    }
-
-    void processChunk(Chunk chunk, size_t input)
-    {
-        if (!chunk.hasRows())
-            return;
-
-        const auto * info = detail::getInfoFromChunk(chunk);
-
-        if (!info->is_overflows && info->bucket_num == -1)
-            some_input_has_single_level_chunks = true;
-
-        if (info->is_bucket_sorted)
-            some_input_has_sorted_chunk = true;
-
-        read_chunks[input] = std::move(chunk);
-        read_from_input[input] = true;
-    }
-
-    void createProcessors() { }
-
-    size_t num_inputs;
-
-    bool some_input_has_single_level_chunks = false;
-    bool some_input_has_sorted_chunk = false;
-
-    ///
-    Processors processors;
-
-    ///
-    Chunks read_chunks;
-
-    bool read_from_all_inputs = false;
-    std::vector<bool> read_from_input;
-};
 
 
 /// Has several inputs and single output.
@@ -402,6 +236,266 @@ private:
     std::vector<bool> is_input_finished;
     std::map<ChunkId, Chunk> chunks;
     Chunk overflow_chunk;
+};
+
+
+/// In case of distributed aggregation we don't know which aggregation algorithm a remote node will choose.
+/// In theory we could receive all types of buckets for merge: single-level, two-level unsorted, two-level sorted (if external memory bound aggregation took place).
+/// This transform analyzes input buckets, chooses merging algorithm and sort unsorted buckets if needed.
+class ChooseMergingAlgorithmTransform : public IProcessor
+{
+public:
+    explicit ChooseMergingAlgorithmTransform(
+        const Block & header_,
+        size_t num_inputs_,
+        AggregatingTransformParamsPtr params_,
+        size_t max_block_bytes_,
+        size_t temporary_data_merge_threads_)
+        : IProcessor(InputPorts(num_inputs_, header_), {header_})
+        , num_inputs(num_inputs_)
+        , read_chunks(num_inputs)
+        , read_from_input(num_inputs, false)
+        , params(params_)
+        , max_block_bytes(max_block_bytes_)
+        , temporary_data_merge_threads(temporary_data_merge_threads_)
+        , last_bucket_number(num_inputs, -1)
+    {
+    }
+
+    String getName() const override { return "ChooseMergingAlgorithmTransform"; }
+
+    void work() override { }
+
+    IProcessor::Status prepare() override
+    {
+        /// Read first time from each input to understand what kinds of buckets do we have.
+        /*if (!read_from_all_inputs)
+        {
+            readFromAllInputs();
+            if (!read_from_all_inputs)
+                return Status::NeedData;
+        }*/
+
+        /// Check if merging processors were already created.
+        if (!processors_created)
+            createProcessors();
+
+        if (!processors.empty())
+            return IProcessor::Status::ExpandPipeline;
+
+        if (outputs.size() != num_inputs)
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "No output ports created");
+
+        /// Output ports (i.e. actual merging transforms) were already created. Here we just forward input chunks to them.
+        auto in = inputs.begin();
+        auto out = outputs.begin();
+
+        bool need_data = false;
+        bool all_finished = true;
+        bool pushed_something = false;
+
+        auto need_input = [this](size_t input_num)
+        {
+            auto current_bucket = *std::min_element(last_bucket_number.begin(), last_bucket_number.end());
+            return last_bucket_number[input_num] <= current_bucket;
+        };
+
+        for (size_t i = 0; i < num_inputs; ++i, ++in, ++out)
+        {
+            if (out->isFinished())
+            {
+                // LOG_DEBUG(&Poco::Logger::get("debug"), "out->isFinished()");
+                in->close();
+                continue;
+            }
+
+            all_finished &= in->isFinished();
+
+            if (in->isFinished())
+            {
+                out->finish();
+                // LOG_DEBUG(&Poco::Logger::get("debug"), "in->isFinished()");
+                continue;
+            }
+
+            // LOG_DEBUG(&Poco::Logger::get("debug"), "i={}", i);
+
+            if (!need_input(i))
+            {
+            }
+
+            if (!out->canPush())
+            {
+                in->setNotNeeded();
+                LOG_DEBUG(&Poco::Logger::get("debug"), "i={} !out->canPush()", i);
+                continue;
+            }
+
+            /*if (!read_chunks[i].empty())
+        {
+            out->push(std::move(read_chunks[i]));
+            read_chunks[i] = Chunk{};
+            continue;
+        }*/
+
+            in->setNeeded();
+            if (!in->hasData())
+            {
+                // LOG_DEBUG(&Poco::Logger::get("debug"), "!in->hasData()");
+                need_data = true;
+                continue;
+            }
+
+            auto chunk = in->pull();
+
+            const auto & info = detail::getInfoFromChunk(chunk);
+            last_bucket_number[i] = info->bucket_num;
+            LOG_DEBUG(&Poco::Logger::get("debug"), "pull from i={}, bucket_id={}, chunk_num={}", i, info->bucket_num, info->chunk_num);
+
+            out->push(std::move(chunk));
+
+            pushed_something = true;
+        }
+
+        // LOG_DEBUG(&Poco::Logger::get("debug"), "need_data={}, all_finished={}, pushed_something={}", need_data, all_finished, pushed_something);
+
+        if (all_finished)
+        {
+            for (auto & output : outputs)
+                output.finish();
+            return Status::Finished;
+        }
+
+        return need_data ? Status::NeedData : pushed_something ? Status::Ready : Status::PortFull;
+    }
+
+private:
+    void readFromAllInputs()
+    {
+        auto in = inputs.begin();
+        read_from_all_inputs = true;
+
+        for (size_t i = 0; i < num_inputs; ++i, ++in)
+        {
+            if (in->isFinished())
+                continue;
+
+            if (read_from_input[i])
+                continue;
+
+            in->setNeeded();
+
+            if (!in->hasData())
+            {
+                read_from_all_inputs = false;
+                continue;
+            }
+
+            auto chunk = in->pull();
+            processChunk(std::move(chunk), i);
+        }
+    }
+
+    void processChunk(Chunk chunk, size_t input)
+    {
+        if (!chunk.hasRows())
+            return;
+
+        const auto * info = detail::getInfoFromChunk(chunk);
+
+        if (!info->is_overflows && info->bucket_num == -1)
+            some_input_has_single_level_chunks = true;
+
+        if (info->is_bucket_sorted)
+            some_input_has_sorted_chunk = true;
+
+        read_chunks[input] = std::move(chunk);
+        read_from_input[input] = true;
+    }
+
+    void createProcessors()
+    {
+        const auto & header = inputs.front().getHeader();
+
+        /*auto transform = std::make_shared<FinishAggregatingInOrderTransform>(
+            header, num_inputs, params, params->params.sort_description, params->params.max_block_size, max_block_bytes);
+
+        Pipe pipe{std::move(transform)};
+
+        /// Do merge of aggregated data in parallel.
+        //pipe.resize(temporary_data_merge_threads);
+
+        pipe.addSimpleTransform([&](const Block &)
+                                { return std::make_shared<MergingAggregatedBucketTransform>(params, params->params.sort_description); });
+
+        pipe.addTransform(std::make_shared<SortingAggregatedForMemoryBoundMergingTransform>(
+            pipe.getHeader(), pipe.numOutputPorts(), params->params.sort_description));*/
+
+        (void)temporary_data_merge_threads;
+        (void)max_block_bytes;
+
+        Pipe pipe{std::make_shared<GroupingAggregatedTransform>(header, num_inputs, params)};
+
+        pipe.addTransform(std::make_shared<MergingAggregatedBucketTransform>(params));
+
+        processors = Pipe::detachProcessors(std::move(pipe));
+
+        processors_created = true;
+    }
+
+    Processors expandPipeline() override
+    {
+        if (processors.empty())
+            throw Exception("Can not expandPipeline in ChooseMergingAlgorithmTransform. This is a bug.", ErrorCodes::LOGICAL_ERROR);
+
+        const auto & header = inputs.front().getHeader();
+
+        /// Connect merging output with our output.
+        if (outputs.size() != 1 || processors.back()->getOutputs().size() != 1)
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "oops");
+
+        LOG_DEBUG(&Poco::Logger::get("debug"), "merging output directed to {}", static_cast<const void *>(&outputs.front().getInputPort()));
+
+        connect(processors.back()->getOutputs().front(), outputs.front().getInputPort(), true);
+
+        /// Connect our outputs with merging inputs.
+        auto & merging_inputs = processors.front()->getInputs();
+
+        if (merging_inputs.size() != num_inputs)
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "oops");
+
+        outputs.clear();
+        for (auto & in : merging_inputs)
+        {
+            outputs.emplace_back(header, this);
+            connect(outputs.back(), in);
+        }
+
+        auto ret = std::move(processors);
+        processors.clear();
+        return ret;
+    }
+
+    size_t num_inputs;
+
+    bool some_input_has_single_level_chunks = false;
+    bool some_input_has_sorted_chunk = false;
+    bool processors_created = false;
+
+    ///
+    Processors processors;
+
+    ///
+    Chunks read_chunks;
+
+    bool read_from_all_inputs = false;
+    std::vector<bool> read_from_input;
+
+    AggregatingTransformParamsPtr params;
+    size_t max_block_bytes;
+    size_t temporary_data_merge_threads;
+
+    std::vector<ssize_t> last_bucket_number;
 };
 
 }
