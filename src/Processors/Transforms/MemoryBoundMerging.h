@@ -249,15 +249,17 @@ public:
         const Block & header_,
         size_t num_inputs_,
         AggregatingTransformParamsPtr params_,
+        size_t temporary_data_merge_threads_,
         size_t max_block_bytes_,
-        size_t temporary_data_merge_threads_)
+        bool memory_bound_merging_enabled_)
         : IProcessor(InputPorts(num_inputs_, header_), {header_})
         , num_inputs(num_inputs_)
         , read_chunks(num_inputs)
         , read_from_input(num_inputs, false)
         , params(params_)
-        , max_block_bytes(max_block_bytes_)
         , temporary_data_merge_threads(temporary_data_merge_threads_)
+        , max_block_bytes(max_block_bytes_)
+        , memory_bound_merging_enabled(memory_bound_merging_enabled_)
         , last_bucket_number(num_inputs, -1)
     {
     }
@@ -439,32 +441,29 @@ private:
     {
         const auto & header = inputs.front().getHeader();
 
-        /*auto transform = std::make_shared<FinishAggregatingInOrderTransform>(
-            header, num_inputs, params, params->params.sort_description, params->params.max_block_size, max_block_bytes);
+        if (!memory_bound_merging_enabled || rand() /*!some_input_has_sorted_chunk*/)
+        {
+            Pipe pipe{std::make_shared<GroupingAggregatedTransform>(header, num_inputs, params)};
 
-        Pipe pipe{std::move(transform)};
+            if (num_inputs <= 1)
+            {
+                pipe.addTransform(std::make_shared<MergingAggregatedBucketTransform>(params));
+                return;
+            }
 
-        /// Do merge of aggregated data in parallel.
-        //pipe.resize(temporary_data_merge_threads);
+            pipe.resize(temporary_data_merge_threads);
 
-        pipe.addSimpleTransform([&](const Block &)
-                                { return std::make_shared<MergingAggregatedBucketTransform>(params, params->params.sort_description); });
+            pipe.addSimpleTransform([this](const Block &) { return std::make_shared<MergingAggregatedBucketTransform>(params); });
 
-        pipe.addTransform(std::make_shared<SortingAggregatedForMemoryBoundMergingTransform>(
-            pipe.getHeader(), pipe.numOutputPorts(), params->params.sort_description));*/
+            pipe.addTransform(std::make_shared<SortingAggregatedTransform>(temporary_data_merge_threads, params));
 
-        (void)temporary_data_merge_threads;
-        (void)max_block_bytes;
-
-        Pipe pipe{std::make_shared<GroupingAggregatedTransform>(header, num_inputs, params)};
-
-        pipe.resize(num_inputs);
-
-        pipe.addSimpleTransform([this](const Block &) { return std::make_shared<MergingAggregatedBucketTransform>(params); });
-
-        pipe.addTransform(std::make_shared<SortingAggregatedTransform>(num_inputs, params));
-
-        processors = Pipe::detachProcessors(std::move(pipe));
+            processors = Pipe::detachProcessors(std::move(pipe));
+        }
+        else
+        {
+            (void)max_block_bytes;
+            (void)temporary_data_merge_threads;
+        }
 
         processors_created = true;
     }
@@ -520,8 +519,9 @@ private:
     std::vector<bool> read_from_input;
 
     AggregatingTransformParamsPtr params;
-    size_t max_block_bytes;
     size_t temporary_data_merge_threads;
+    size_t max_block_bytes;
+    bool memory_bound_merging_enabled;
 
     std::vector<ssize_t> last_bucket_number;
 };

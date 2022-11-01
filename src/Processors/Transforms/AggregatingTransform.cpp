@@ -643,19 +643,9 @@ void AggregatingTransform::initGenerate()
             ReadableSize(compressed_size),
             ReadableSize(uncompressed_size));
 
-        (void)memory_bound_merging_enabled;
+        /// todo: put this in addMergingAggregatedMemoryEfficientTransform and call it here
         pipe.addTransform(std::make_shared<ChooseMergingAlgorithmTransform>(
-            pipe.getHeader(), pipe.numOutputPorts(), params, max_block_bytes, temporary_data_merge_threads));
-
-        /*if (memory_bound_merging_enabled)
-        {
-            pipe.addTransform(std::make_shared<ChooseMergingAlgorithmTransform>(
-                pipe.getHeader(), pipe.numOutputPorts(), params, max_block_bytes, temporary_data_merge_threads));
-        }
-        else
-        {
-            addMergingAggregatedMemoryEfficientTransform(pipe, params, temporary_data_merge_threads);
-        }*/
+            pipe.getHeader(), pipe.numOutputPorts(), params, temporary_data_merge_threads, max_block_bytes, memory_bound_merging_enabled));
 
         processors = Pipe::detachProcessors(std::move(pipe));
     }
