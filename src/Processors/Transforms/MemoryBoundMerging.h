@@ -441,7 +441,7 @@ private:
     {
         const auto & header = inputs.front().getHeader();
 
-        if (!memory_bound_merging_enabled || rand() /*!some_input_has_sorted_chunk*/)
+        if (!memory_bound_merging_enabled /* || !some_input_has_sorted_chunk */)
         {
             Pipe pipe{std::make_shared<GroupingAggregatedTransform>(header, num_inputs, params)};
 
@@ -461,8 +461,18 @@ private:
         }
         else
         {
-            (void)max_block_bytes;
-            (void)temporary_data_merge_threads;
+            Pipe pipe{std::make_shared<FinishAggregatingInOrderTransform>(
+                header, num_inputs, params, params->params.sort_description, params->params.max_block_size, max_block_bytes)};
+
+            pipe.resize(temporary_data_merge_threads);
+
+            pipe.addSimpleTransform(
+                [&](const Block &) { return std::make_shared<MergingAggregatedBucketTransform>(params, params->params.sort_description); });
+
+            pipe.addTransform(std::make_shared<SortingAggregatedForMemoryBoundMergingTransform>(
+                pipe.getHeader(), pipe.numOutputPorts(), params->params.sort_description));
+
+            processors = Pipe::detachProcessors(std::move(pipe));
         }
 
         processors_created = true;
@@ -482,7 +492,7 @@ private:
         // LOG_DEBUG(&Poco::Logger::get("debug"), "merging output directed to {}", static_cast<const void *>(&outputs.front().getInputPort()));
 
         /// We create new input in the current transform;
-        inputs.emplace_back(header, this);
+        inputs.emplace_back(params->getHeader(), this);
         connect(processors.back()->getOutputs().front(), inputs.back(), true);
 
         /// Connect our outputs with merging inputs.
