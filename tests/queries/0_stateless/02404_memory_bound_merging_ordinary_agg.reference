@@ -4,18 +4,17 @@ explain pipeline select a from remote(test_cluster_two_shards, currentDatabase()
 ExpressionTransform × 4
   (MergingAggregated)
   Resize 1 → 4
-    MergingAggregatedTransform
-      Resize 2 → 1
-        (Union)
-          (Aggregating)
-          Resize 4 → 1
-            AggregatingTransform × 4
-              StrictResize 4 → 4
-                (Expression)
-                ExpressionTransform × 4
-                  (ReadFromMergeTree)
-                  MergeTreeThread × 4 0 → 1
-          (ReadFromRemote)
+    ChooseMergingAlgorithmTransform 2 → 1
+      (Union)
+        (Aggregating)
+        Resize 4 → 1
+          AggregatingTransform × 4
+            StrictResize 4 → 4
+              (Expression)
+              ExpressionTransform × 4
+                (ReadFromMergeTree)
+                MergeTreeThread × 4 0 → 1
+        (ReadFromRemote)
 explain sorting=1 select a from remote(test_cluster_two_shards, currentDatabase(), t) group by a;
 Expression ((Projection + Before ORDER BY))
 Sorting (None)
@@ -42,23 +41,21 @@ explain pipeline select a from remote(test_cluster_two_shards, currentDatabase()
 ExpressionTransform × 4
   (MergingAggregated)
   Resize 1 → 4
-    MergingAggregatedTransform
-      Resize 2 → 1
-        (Union)
-          (MergingAggregated)
-          MergingAggregatedTransform
-            Resize 2 → 1
-              (Union)
-                (Aggregating)
-                Resize 4 → 1
-                  AggregatingTransform × 4
-                    StrictResize 4 → 4
-                      (Expression)
-                      ExpressionTransform × 4
-                        (ReadFromMergeTree)
-                        MergeTreeThread × 4 0 → 1
-                (ReadFromRemote)
-          (ReadFromRemote)
+    ChooseMergingAlgorithmTransform 2 → 1
+      (Union)
+        (MergingAggregated)
+        ChooseMergingAlgorithmTransform 2 → 1
+          (Union)
+            (Aggregating)
+            Resize 4 → 1
+              AggregatingTransform × 4
+                StrictResize 4 → 4
+                  (Expression)
+                  ExpressionTransform × 4
+                    (ReadFromMergeTree)
+                    MergeTreeThread × 4 0 → 1
+            (ReadFromRemote)
+        (ReadFromRemote)
 explain sorting=1 select a from remote(test_cluster_two_shards, currentDatabase(), dist_t) group by a;
 Expression ((Projection + Before ORDER BY))
 Sorting (None)
@@ -102,30 +99,27 @@ ExpressionTransform
             ExpressionTransform × 4
               (MergingAggregated)
               Resize 1 → 4
-                MergingAggregatedTransform
-                  Resize 2 → 1
-                    (Union)
-                      (Aggregating)
-                      Resize 4 → 1
-                        AggregatingTransform × 4
-                          StrictResize 4 → 4
-                            (Expression)
-                            ExpressionTransform × 4
-                              (ReadFromMergeTree)
-                              MergeTreeThread × 4 0 → 1
-                      (ReadFromRemote)
+                ChooseMergingAlgorithmTransform 2 → 1
+                  (Union)
+                    (Aggregating)
+                    AggregatingTransform
+                      (Expression)
+                      ExpressionTransform
+                        (ReadFromMergeTree)
+                        MergeTreeInOrder 0 → 1
+                    (ReadFromRemote)
 select a, count() from dist_t_different_dbs group by a order by a limit 5 offset 500;
-500	2000
-501	2000
-502	2000
-503	2000
-504	2000
+500	200
+501	200
+502	200
+503	200
+504	200
 select a, count() from dist_t_different_dbs group by a, b order by a limit 5 offset 500;
-500	2000
-501	2000
-502	2000
-503	2000
-504	2000
+500	200
+501	200
+502	200
+503	200
+504	200
 -- { echoOn } --
 explain pipeline select a from dist_pr_t group by a order by a limit 5 offset 500;
 (Expression)
@@ -141,18 +135,17 @@ ExpressionTransform
             ExpressionTransform × 4
               (MergingAggregated)
               Resize 1 → 4
-                MergingAggregatedTransform
-                  Resize 3 → 1
-                    (Union)
-                      (Aggregating)
-                      Resize 4 → 1
-                        AggregatingTransform × 4
-                          StrictResize 4 → 4
-                            (Expression)
-                            ExpressionTransform × 4
-                              (ReadFromMergeTree)
-                              MergeTreeThread × 4 0 → 1
-                      (ReadFromRemoteParallelReplicas)
+                ChooseMergingAlgorithmTransform 3 → 1
+                  (Union)
+                    (Aggregating)
+                    Resize 4 → 1
+                      AggregatingTransform × 4
+                        StrictResize 4 → 4
+                          (Expression)
+                          ExpressionTransform × 4
+                            (ReadFromMergeTree)
+                            MergeTreeThread × 4 0 → 1
+                    (ReadFromRemoteParallelReplicas)
 select a, count() from dist_pr_t group by a order by a limit 5 offset 500;
 500	1000
 501	1000
@@ -167,26 +160,6 @@ select a, count() from dist_pr_t group by a, b order by a limit 5 offset 500;
 504	1000
 0	3
 1	3
-0	3
-1	3
-2	3
-3	3
-4	3
-5	3
-6	3
-7	3
-8	3
-9	3
-0	6
-1	6
-2	6
-3	6
-4	6
-5	6
-6	6
-7	6
-8	6
-9	6
 0	1
 1	1
 2	1

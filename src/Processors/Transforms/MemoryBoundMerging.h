@@ -252,7 +252,7 @@ public:
         size_t temporary_data_merge_threads_,
         size_t max_block_bytes_,
         bool memory_bound_merging_enabled_)
-        : IProcessor(InputPorts(num_inputs_, header_), {header_})
+        : IProcessor(InputPorts(num_inputs_, header_), {params_->getHeader()})
         , num_inputs(num_inputs_)
         , read_chunks(num_inputs)
         , read_from_input(num_inputs, false)
@@ -260,7 +260,6 @@ public:
         , temporary_data_merge_threads(temporary_data_merge_threads_)
         , max_block_bytes(max_block_bytes_)
         , memory_bound_merging_enabled(memory_bound_merging_enabled_)
-        , last_bucket_number(num_inputs, -1)
     {
     }
 
@@ -271,12 +270,15 @@ public:
     IProcessor::Status prepare() override
     {
         /// Read first time from each input to understand what kinds of buckets do we have.
-        /*if (!read_from_all_inputs)
+        if (!read_from_all_inputs)
         {
             readFromAllInputs();
             if (!read_from_all_inputs)
                 return Status::NeedData;
-        }*/
+
+            if (some_input_has_single_level_chunks)
+                throw Exception(ErrorCodes::NOT_IMPLEMENTED, "");
+        }
 
         /// Check if merging processors were already created.
         if (!processors_created)
@@ -317,12 +319,6 @@ public:
         bool all_finished = true;
         bool pushed_something = false;
 
-        auto need_input = [this](size_t input_num)
-        {
-            auto current_bucket = *std::min_element(last_bucket_number.begin(), last_bucket_number.end());
-            return last_bucket_number[input_num] <= current_bucket;
-        };
-
         for (size_t i = 0; i < num_inputs; ++i, ++in, ++out)
         {
             if (out->isFinished())
@@ -343,10 +339,6 @@ public:
 
             // LOG_DEBUG(&Poco::Logger::get("debug"), "i={}", i);
 
-            if (!need_input(i))
-            {
-            }
-
             if (!out->canPush())
             {
                 in->setNotNeeded();
@@ -354,12 +346,12 @@ public:
                 continue;
             }
 
-            /*if (!read_chunks[i].empty())
-        {
-            out->push(std::move(read_chunks[i]));
-            read_chunks[i] = Chunk{};
-            continue;
-        }*/
+            if (!read_chunks[i].empty())
+            {
+                out->push(std::move(read_chunks[i]));
+                read_chunks[i] = Chunk{};
+                continue;
+            }
 
             in->setNeeded();
             if (!in->hasData())
@@ -370,13 +362,7 @@ public:
             }
 
             auto chunk = in->pull();
-
-            // const auto & info = detail::getInfoFromChunk(chunk);
-            // last_bucket_number[i] = info->bucket_num;
-            // LOG_DEBUG(&Poco::Logger::get("debug"), "pull from i={}, bucket_id={}, chunk_num={}", i, info->bucket_num, info->chunk_num);
-
             out->push(std::move(chunk));
-
             pushed_something = true;
         }
 
@@ -433,6 +419,11 @@ private:
         if (info->is_bucket_sorted)
             some_input_has_sorted_chunk = true;
 
+        if (some_input_has_sorted_chunk && !info->is_bucket_sorted)
+        {
+            throw Exception(ErrorCodes::NOT_IMPLEMENTED, "");
+        }
+
         read_chunks[input] = std::move(chunk);
         read_from_input[input] = true;
     }
@@ -441,7 +432,7 @@ private:
     {
         const auto & header = inputs.front().getHeader();
 
-        if (!memory_bound_merging_enabled /* || !some_input_has_sorted_chunk */)
+        if (!memory_bound_merging_enabled || !some_input_has_sorted_chunk)
         {
             Pipe pipe{std::make_shared<GroupingAggregatedTransform>(header, num_inputs, params)};
 
@@ -532,8 +523,6 @@ private:
     size_t temporary_data_merge_threads;
     size_t max_block_bytes;
     bool memory_bound_merging_enabled;
-
-    std::vector<ssize_t> last_bucket_number;
 };
 
 }
