@@ -29,7 +29,8 @@ static bool memoryBoundMergingWillBeUsed(
     bool memory_bound_merging_of_aggregation_results_enabled,
     SortDescription sort_description_for_merging)
 {
-    return should_produce_results_in_order_of_bucket_number && memory_bound_merging_of_aggregation_results_enabled && !sort_description_for_merging.empty();
+    return should_produce_results_in_order_of_bucket_number && memory_bound_merging_of_aggregation_results_enabled
+        && !sort_description_for_merging.empty();
 }
 
 static ITransformingStep::Traits getTraits(bool should_produce_results_in_order_of_bucket_number, bool memory_bound_merging_will_be_used)
@@ -141,6 +142,7 @@ void AggregatingStep::applyOrder(SortDescription sort_description_for_merging_, 
     {
         output_stream->sort_description = group_by_sort_description;
         output_stream->sort_scope = DataStream::SortScope::Global;
+        data_stream_traits.can_enforce_sorting_properties_in_distributed_query = true;
     }
 }
 
@@ -473,7 +475,7 @@ void AggregatingStep::updateOutputStream()
     output_stream = createOutputStream(
         input_streams.front(),
         appendGroupingColumn(params.getHeader(input_streams.front().header, final), params.keys, grouping_sets_params, group_by_use_nulls),
-        getDataStreamTraits());
+        getTraits(should_produce_results_in_order_of_bucket_number, memoryBoundMergingWillBeUsed()).data_stream_traits);
 }
 
 void AggregatingStep::adjustSettingsToEnforceSortingPropertiesInDistributedQuery(ContextMutablePtr context) const

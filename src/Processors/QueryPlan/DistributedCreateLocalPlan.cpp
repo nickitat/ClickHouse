@@ -1,8 +1,9 @@
-#include <Processors/QueryPlan/DistributedCreateLocalPlan.h>
-#include <Common/checkStackSize.h>
-#include <Processors/QueryPlan/ExpressionStep.h>
 #include <Interpreters/ActionsDAG.h>
 #include <Interpreters/InterpreterSelectQuery.h>
+#include <Processors/QueryPlan/DistributedCreateLocalPlan.h>
+#include <Processors/QueryPlan/ExpressionStep.h>
+#include <Processors/QueryPlan/Optimizations/QueryPlanOptimizationSettings.h>
+#include <Common/checkStackSize.h>
 
 namespace DB
 {
@@ -68,6 +69,7 @@ std::unique_ptr<QueryPlan> createLocalPlan(
     }
 
     interpreter.buildQueryPlan(*query_plan);
+    query_plan->optimize(QueryPlanOptimizationSettings::fromContext(context));
     addConvertingActions(*query_plan, header);
     return query_plan;
 }

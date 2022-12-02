@@ -2472,6 +2472,7 @@ void InterpreterSelectQuery::executeAggregation(QueryPlan & query_plan, const Ac
         /// Not the most optimal implementation here, but this branch handles very marginal case.
 
         group_by_sort_description = getSortDescriptionFromGroupBy(getSelectQuery());
+        sort_description_for_merging = group_by_sort_description;
 
         auto sorting_step = std::make_unique<SortingStep>(
             query_plan.getCurrentDataStream(),

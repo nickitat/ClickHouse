@@ -107,7 +107,8 @@ private:
     Processors processors;
     bool collect_processors;
 
-    const DataStreamTraits data_stream_traits;
+protected:
+    DataStreamTraits data_stream_traits;
 };
 
 }
