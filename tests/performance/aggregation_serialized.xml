@@ -1,0 +1,36 @@
+<test>
+  <settings>
+    <max_size_to_preallocate_for_aggregation>1</max_size_to_preallocate_for_aggregation>
+    <collect_hash_table_stats_during_aggregation>0</collect_hash_table_stats_during_aggregation>
+  </settings>
+
+  <substitutions>
+      <substitution>
+          <name>size</name>
+          <values>
+              <value>100000</value>
+              <value>500000</value>
+              <value>1000000</value>
+              <value>1500000</value>
+              <value>2000000</value>
+              <value>2500000</value>
+              <value>3000000</value>
+              <value>3500000</value>
+              <value>4000000</value>
+              <value>4500000</value>
+              <value>5000000</value>
+              <value>10000000</value>
+          </values>
+      </substitution>
+  </substitutions>
+
+  <create_query>create table t_{size}(a UInt64, b String) engine=MergeTree order by tuple();</create_query>
+  <create_query>create table gen(a UInt64, b String) engine = GenerateRandom(42, 100);</create_query>
+
+  <fill_query>insert into t_{size} select * from gen limit {size}</fill_query>
+
+  <query>select a, b from t_{size} group by a, b format Null</query>
+
+  <drop_query>drop table t_{size};</drop_query>
+  <drop_query>drop table gen;</drop_query>
+</test>
