@@ -1,13 +1,14 @@
 #include <algorithm>
 #include <functional>
+#include <iterator>
 #include <memory>
 #include <numeric>
 #include <queue>
 #include <stdexcept>
 #include <IO/Operators.h>
+#include <Interpreters/Context.h>
 #include <Interpreters/ExpressionAnalyzer.h>
 #include <Interpreters/TreeRewriter.h>
-#include <Interpreters/Context.h>
 #include <Parsers/ASTFunction.h>
 #include <Parsers/ASTIdentifier.h>
 #include <Parsers/ASTSelectQuery.h>
@@ -30,13 +31,13 @@
 #include <Storages/MergeTree/MergeTreeInOrderSelectProcessor.h>
 #include <Storages/MergeTree/MergeTreeReadPool.h>
 #include <Storages/MergeTree/MergeTreeReverseSelectProcessor.h>
-#include <Storages/MergeTree/MergeTreeThreadSelectProcessor.h>
 #include <Storages/MergeTree/MergeTreeSource.h>
+#include <Storages/MergeTree/MergeTreeThreadSelectProcessor.h>
 #include <Storages/VirtualColumnUtils.h>
-#include <Common/logger_useful.h>
 #include <base/sort.h>
 #include <Poco/Logger.h>
 #include <Common/JSONBuilder.h>
+#include <Common/logger_useful.h>
 
 namespace ProfileEvents
 {
@@ -242,7 +243,6 @@ Pipe ReadFromMergeTree::readFromPool(
         if (i == 0 && !client_info.collaborate_with_initiator)
             source->addTotalRowsApprox(total_rows);
 
-
         pipes.emplace_back(std::move(source));
     }
 
@@ -418,9 +418,8 @@ struct PartRangesReadInfo
 
 }
 
-Pipe ReadFromMergeTree::spreadMarkRangesAmongStreams(
-    RangesInDataParts && parts_with_ranges,
-    const Names & column_names)
+Pipe ReadFromMergeTree::spreadMarkRangesAmongStreamsImpl(
+    RangesInDataParts && parts_with_ranges, const Names & column_names, size_t num_streams)
 {
     const auto & settings = context->getSettingsRef();
     const auto data_settings = data.getSettings();
@@ -430,16 +429,74 @@ Pipe ReadFromMergeTree::spreadMarkRangesAmongStreams(
     if (0 == info.sum_marks)
         return {};
 
-    size_t num_streams = requested_num_streams;
     if (num_streams > 1)
     {
         /// Reduce the number of num_streams if the data is small.
         if (info.sum_marks < num_streams * info.min_marks_for_concurrent_read && parts_with_ranges.size() < num_streams)
-            num_streams = std::max((info.sum_marks + info.min_marks_for_concurrent_read - 1) / info.min_marks_for_concurrent_read, parts_with_ranges.size());
+            num_streams = std::max(
+                (info.sum_marks + info.min_marks_for_concurrent_read - 1) / info.min_marks_for_concurrent_read, parts_with_ranges.size());
     }
 
-    return read(std::move(parts_with_ranges), column_names, ReadType::Default,
-                num_streams, info.min_marks_for_concurrent_read, info.use_uncompressed_cache);
+    return read(
+        std::move(parts_with_ranges),
+        column_names,
+        ReadType::Default,
+        num_streams,
+        info.min_marks_for_concurrent_read,
+        info.use_uncompressed_cache);
+}
+
+Pipe ReadFromMergeTree::spreadMarkRangesAmongStreams(
+    RangesInDataParts && parts_with_ranges,
+    const Names & column_names)
+{
+    if (parts_with_ranges.empty())
+        return {};
+
+    size_t num_streams = requested_num_streams;
+
+    if (!output_each_partition_through_separate_port)
+    {
+        return spreadMarkRangesAmongStreamsImpl(std::move(parts_with_ranges), column_names, num_streams);
+    }
+    else
+    {
+        size_t cur_partition_id = parts_with_ranges[0].part_index_in_query;
+        size_t unique_partitions = 1;
+        for (size_t i = 1; i < parts_with_ranges.size(); ++i)
+        {
+            if (parts_with_ranges[i].part_index_in_query != cur_partition_id)
+            {
+                ++unique_partitions;
+                cur_partition_id = parts_with_ranges[i].part_index_in_query;
+            }
+        }
+
+        num_streams = std::max<size_t>(1, num_streams / unique_partitions);
+
+        LOG_DEBUG(&Poco::Logger::get("debug"), "spreadMarkRangesAmongStreams {} {}", parts_with_ranges.size(), num_streams);
+
+        Pipes pipes;
+        auto begin = parts_with_ranges.begin();
+        while (begin != parts_with_ranges.end())
+        {
+            const auto end = std::find_if(
+                begin,
+                parts_with_ranges.end(),
+                [&begin](auto & part) { return begin->data_part->info.partition_id != part.data_part->info.partition_id; });
+
+            LOG_DEBUG(&Poco::Logger::get("debug"), "spreadMarkRangesAmongStreams {} {}", begin->data_part->info.partition_id, end - begin);
+
+            RangesInDataParts partition_parts;
+            partition_parts.insert(partition_parts.end(), std::make_move_iterator(begin), std::make_move_iterator(end));
+
+            pipes.emplace_back(spreadMarkRangesAmongStreamsImpl(std::move(partition_parts), column_names, num_streams));
+
+            begin = end;
+        }
+
+        return Pipe::unitePipes(std::move(pipes));
+    }
 }
 
 static ActionsDAGPtr createProjection(const Block & header)
@@ -1198,6 +1255,11 @@ void ReadFromMergeTree::requestReadingInOrder(size_t prefix_size, int direction,
         output_stream->sort_description = std::move(sort_description);
         output_stream->sort_scope = DataStream::SortScope::Stream;
     }
+}
+
+void ReadFromMergeTree::requestOutputEachPartitionThroughSeparatePort()
+{
+    output_each_partition_through_separate_port = true;
 }
 
 ReadFromMergeTree::AnalysisResult ReadFromMergeTree::getAnalysisResult() const
