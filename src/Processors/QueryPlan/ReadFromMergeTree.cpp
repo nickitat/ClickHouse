@@ -335,8 +335,12 @@ Pipe ReadFromMergeTree::read(
     size_t max_streams, size_t min_marks_for_concurrent_read, bool use_uncompressed_cache)
 {
     if (read_type == ReadType::Default && max_streams > 1)
-        return readFromPool(parts_with_range, required_columns, max_streams,
-                            min_marks_for_concurrent_read, use_uncompressed_cache);
+    {
+        Pipe pipe = readFromPool(parts_with_range, required_columns, max_streams, min_marks_for_concurrent_read, use_uncompressed_cache);
+        if (output_each_partition_through_separate_port)
+            pipe.addTransform(std::make_shared<ConcatProcessor>(pipe.getHeader(), pipe.numOutputPorts()));
+        return pipe;
+    }
 
     auto pipe = readInOrder(parts_with_range, required_columns, read_type, use_uncompressed_cache, 0);
 

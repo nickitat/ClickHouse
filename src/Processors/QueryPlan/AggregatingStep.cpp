@@ -421,7 +421,7 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
     if (pipeline.getNumStreams() > 1)
     {
         /// Add resize transform to uniformly distribute data between aggregating streams.
-        if (!storage_has_evenly_distributed_read)
+        if (!skip_merging && !storage_has_evenly_distributed_read)
             pipeline.resize(pipeline.getNumStreams(), true, true);
 
         auto many_data = std::make_shared<ManyAggregatedData>(pipeline.getNumStreams());
