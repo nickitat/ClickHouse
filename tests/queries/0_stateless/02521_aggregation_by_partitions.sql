@@ -11,6 +11,8 @@ explain pipeline select a from t1 group by a;
 
 select count() from (select throwIf(count() != 2) from t1 group by a);
 
+drop table t1;
+
 create table t2(a UInt32) engine=MergeTree order by tuple() partition by a % 8;
 
 system stop merges t2;
@@ -23,3 +25,16 @@ explain pipeline select a from t2 group by a;
 select count() from (select throwIf(count() != 2) from t2 group by a);
 
 drop table t2;
+
+create table t3(a UInt32) engine=MergeTree order by tuple() partition by a % 16;
+
+system stop merges t3;
+
+insert into t3 select number from numbers_mt(1e6);
+insert into t3 select number from numbers_mt(1e6);
+
+explain pipeline select a from t3 group by a;
+
+select count() from (select throwIf(count() != 2) from t3 group by a);
+
+drop table t3;

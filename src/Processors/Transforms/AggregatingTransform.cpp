@@ -572,28 +572,22 @@ void AggregatingTransform::initGenerate()
             params->aggregator.writeToTemporaryFile(variants);
     }
 
-    if (!skip_merging && (many_data->num_finished.fetch_add(1) + 1 < many_data->variants.size()))
+    if ((many_data->num_finished.fetch_add(1) + 1 < many_data->variants.size()) && !skip_merging)
         return;
 
     if (!params->aggregator.hasTemporaryData())
     {
-        auto prepare_merging = [](auto & variants_, const auto & params_, size_t max_threads_, auto & processors_)
-        {
-            auto prepared_data = params_->aggregator.prepareVariantsToMerge(variants_);
-            auto prepared_data_ptr = std::make_shared<ManyAggregatedDataVariants>(std::move(prepared_data));
-            processors_.emplace_back(
-                std::make_shared<ConvertingAggregatedToChunksTransform>(params_, std::move(prepared_data_ptr), max_threads_));
-        };
-
+        ManyAggregatedDataVariantsPtr prepared_data_ptr;
         if (!skip_merging)
         {
-            prepare_merging(many_data->variants, params, max_threads, processors);
+            auto prepared_data = params->aggregator.prepareVariantsToMerge(many_data->variants);
+            prepared_data_ptr = std::make_shared<ManyAggregatedDataVariants>(std::move(prepared_data));
         }
         else
         {
-            auto my_variant = ManyAggregatedDataVariants{many_data->variants[current_variant]};
-            prepare_merging(my_variant, params, 1, processors);
+            prepared_data_ptr = std::make_shared<ManyAggregatedDataVariants>(1, many_data->variants[current_variant]);
         }
+        processors.emplace_back(std::make_shared<ConvertingAggregatedToChunksTransform>(params, std::move(prepared_data_ptr), max_threads));
     }
     else
     {

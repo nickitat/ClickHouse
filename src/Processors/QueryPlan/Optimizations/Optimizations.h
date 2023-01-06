@@ -80,7 +80,7 @@ inline const auto & getOptimizations()
          "reuseStorageOrderingForWindowFunctions",
          &QueryPlanOptimizationSettings::optimize_plan},
         {tryLiftUpUnion, "liftUpUnion", &QueryPlanOptimizationSettings::optimize_plan},
-        {tryAggregateEachPartitionIndependently, "aggregationPartitionsSeparately", &QueryPlanOptimizationSettings::optimize_plan},
+        {tryAggregateEachPartitionIndependently, "aggregationPartitionsIndepedently", &QueryPlanOptimizationSettings::optimize_plan},
     }};
 
     return optimizations;

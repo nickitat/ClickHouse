@@ -39,6 +39,24 @@
 #include <Common/JSONBuilder.h>
 #include <Common/logger_useful.h>
 
+namespace
+{
+size_t countPartitions(DB::RangesInDataParts & parts_with_ranges)
+{
+    std::string cur_partition_id = parts_with_ranges[0].data_part->info.partition_id;
+    size_t unique_partitions = 1;
+    for (size_t i = 1; i < parts_with_ranges.size(); ++i)
+    {
+        if (parts_with_ranges[i].data_part->info.partition_id != cur_partition_id)
+        {
+            ++unique_partitions;
+            cur_partition_id = parts_with_ranges[i].data_part->info.partition_id;
+        }
+    }
+    return unique_partitions;
+}
+}
+
 namespace ProfileEvents
 {
     extern const Event SelectedParts;
@@ -338,7 +356,7 @@ Pipe ReadFromMergeTree::read(
     {
         Pipe pipe = readFromPool(parts_with_range, required_columns, max_streams, min_marks_for_concurrent_read, use_uncompressed_cache);
         if (output_each_partition_through_separate_port)
-            pipe.addTransform(std::make_shared<ConcatProcessor>(pipe.getHeader(), pipe.numOutputPorts()));
+            pipe.resize(1);
         return pipe;
     }
 
@@ -465,24 +483,17 @@ Pipe ReadFromMergeTree::spreadMarkRangesAmongStreams(
     }
     else
     {
-        size_t cur_partition_id = parts_with_ranges[0].part_index_in_query;
-        size_t unique_partitions = 1;
-        for (size_t i = 1; i < parts_with_ranges.size(); ++i)
-        {
-            if (parts_with_ranges[i].part_index_in_query != cur_partition_id)
-            {
-                ++unique_partitions;
-                cur_partition_id = parts_with_ranges[i].part_index_in_query;
-            }
-        }
+        num_streams = std::max<size_t>(1, num_streams / countPartitions(parts_with_ranges));
 
-        num_streams = std::max<size_t>(1, num_streams / unique_partitions);
-
-        LOG_DEBUG(&Poco::Logger::get("debug"), "spreadMarkRangesAmongStreams {} {}", parts_with_ranges.size(), num_streams);
+        LOG_DEBUG(
+            &Poco::Logger::get("debug"),
+            "spreadMarkRangesAmongStreams {} {} {}",
+            parts_with_ranges.size(),
+            requested_num_streams,
+            countPartitions(parts_with_ranges));
 
         Pipes pipes;
-        auto begin = parts_with_ranges.begin();
-        while (begin != parts_with_ranges.end())
+        for (auto begin = parts_with_ranges.begin(); begin != parts_with_ranges.end();)
         {
             const auto end = std::find_if(
                 begin,
