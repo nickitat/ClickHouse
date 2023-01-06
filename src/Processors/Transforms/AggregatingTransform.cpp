@@ -150,9 +150,15 @@ private:
 class ConvertingAggregatedToChunksTransform : public IProcessor
 {
 public:
-    ConvertingAggregatedToChunksTransform(AggregatingTransformParamsPtr params_, ManyAggregatedDataVariantsPtr data_, size_t num_threads_)
+    ConvertingAggregatedToChunksTransform(
+        AggregatingTransformParamsPtr params_, ManyAggregatedDataVariantsPtr data_, size_t num_threads_, bool skip_merging_)
         : IProcessor({}, {params_->getHeader()})
-        , params(std::move(params_)), data(std::move(data_)), num_threads(num_threads_) {}
+        , params(std::move(params_))
+        , data(std::move(data_))
+        , num_threads(num_threads_)
+        , skip_merging(skip_merging_)
+    {
+    }
 
     String getName() const override { return "ConvertingAggregatedToChunksTransform"; }
 
@@ -167,8 +173,37 @@ public:
         if (!is_initialized)
         {
             initialize();
+
+            if (skip_merging)
+            {
+                if (!converted_to_chunks)
+                {
+                    for (auto & variant : *data)
+                    {
+                        auto blocks = params->aggregator.convertToBlocks(*variant, params->final, 1 /* max_threads */);
+                        for (auto & block : blocks)
+                            if (block.info.bucket_num == -1)
+                            {
+                                single_level_chunks.emplace_back(convertToChunk(block));
+                                finished = true;
+                            }
+                            else
+                            {
+                                if (two_level_chunks[block.info.bucket_num])
+                                    two_level_chunks[block.info.bucket_num].append(convertToChunk(block));
+                                else
+                                    two_level_chunks[block.info.bucket_num] = convertToChunk(block);
+                            }
+                    }
+                }
+                converted_to_chunks = true;
+            }
+
             return;
         }
+
+        if (skip_merging)
+            return;
 
         if (data->at(0)->isTwoLevel())
         {
@@ -230,7 +265,7 @@ public:
             return preparePushToOutput();
 
         /// Single level case.
-        if (inputs.empty())
+        if (inputs.empty() && !skip_merging)
             return Status::Ready;
 
         /// Two-level case.
@@ -274,10 +309,10 @@ private:
             }
         }
 
-        if (!shared_data->is_bucket_processed[current_bucket_num])
+        if (!skip_merging && !shared_data->is_bucket_processed[current_bucket_num])
             return Status::NeedData;
 
-        if (!two_level_chunks[current_bucket_num])
+        if (!skip_merging && !two_level_chunks[current_bucket_num])
             return Status::NeedData;
 
         auto chunk = std::move(two_level_chunks[current_bucket_num]);
@@ -301,6 +336,9 @@ private:
     ConvertingAggregatedToChunksSource::SharedDataPtr shared_data;
 
     size_t num_threads;
+
+    bool skip_merging = false;
+    bool converted_to_chunks = false; /// For the fast path when merging is not needed
 
     bool is_initialized = false;
     bool finished = false;
@@ -405,6 +443,7 @@ AggregatingTransform::AggregatingTransform(
     , current_variant(current_variant_)
     , skip_merging(skip_merging_)
 {
+    (void)current_variant;
 }
 
 AggregatingTransform::~AggregatingTransform() = default;
@@ -572,22 +611,15 @@ void AggregatingTransform::initGenerate()
             params->aggregator.writeToTemporaryFile(variants);
     }
 
-    if ((many_data->num_finished.fetch_add(1) + 1 < many_data->variants.size()) && !skip_merging)
+    if (many_data->num_finished.fetch_add(1) + 1 < many_data->variants.size())
         return;
 
     if (!params->aggregator.hasTemporaryData())
     {
-        ManyAggregatedDataVariantsPtr prepared_data_ptr;
-        if (!skip_merging)
-        {
-            auto prepared_data = params->aggregator.prepareVariantsToMerge(many_data->variants);
-            prepared_data_ptr = std::make_shared<ManyAggregatedDataVariants>(std::move(prepared_data));
-        }
-        else
-        {
-            prepared_data_ptr = std::make_shared<ManyAggregatedDataVariants>(1, many_data->variants[current_variant]);
-        }
-        processors.emplace_back(std::make_shared<ConvertingAggregatedToChunksTransform>(params, std::move(prepared_data_ptr), max_threads));
+        auto prepared_data = params->aggregator.prepareVariantsToMerge(many_data->variants);
+        auto prepared_data_ptr = std::make_shared<ManyAggregatedDataVariants>(std::move(prepared_data));
+        processors.emplace_back(
+            std::make_shared<ConvertingAggregatedToChunksTransform>(params, std::move(prepared_data_ptr), max_threads, skip_merging));
     }
     else
     {

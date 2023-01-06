@@ -154,7 +154,8 @@ public:
 
     void requestReadingInOrder(size_t prefix_size, int direction, size_t limit);
 
-    void requestOutputEachPartitionThroughSeparatePort();
+    /// Returns true if the optimisation is applicable (and applies it then).
+    bool requestOutputEachPartitionThroughSeparatePort();
     bool willOutputEachPartitionThroughSeparatePort() const { return output_each_partition_through_separate_port; }
 
 private:
@@ -170,6 +171,8 @@ private:
         const Names & real_column_names,
         bool sample_factor_column_queried,
         Poco::Logger * log);
+
+    bool isQueryWithFinal() const;
 
     int getSortDirection() const
     {

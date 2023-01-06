@@ -1270,11 +1270,18 @@ void ReadFromMergeTree::requestReadingInOrder(size_t prefix_size, int direction,
         output_stream->sort_description = std::move(sort_description);
         output_stream->sort_scope = DataStream::SortScope::Stream;
     }
+
+    /// Not supported currently. Disable optimisation.
+    output_each_partition_through_separate_port = false;
 }
 
-void ReadFromMergeTree::requestOutputEachPartitionThroughSeparatePort()
+bool ReadFromMergeTree::requestOutputEachPartitionThroughSeparatePort()
 {
+    if (isQueryWithFinal() || query_info.getInputOrderInfo())
+        return false;
+
     output_each_partition_through_separate_port = true;
+    return true;
 }
 
 ReadFromMergeTree::AnalysisResult ReadFromMergeTree::getAnalysisResult() const
@@ -1284,6 +1291,15 @@ ReadFromMergeTree::AnalysisResult ReadFromMergeTree::getAnalysisResult() const
         std::rethrow_exception(std::get<std::exception_ptr>(result_ptr->result));
 
     return std::get<ReadFromMergeTree::AnalysisResult>(result_ptr->result);
+}
+
+bool ReadFromMergeTree::isQueryWithFinal() const
+{
+    const auto & select = query_info.query->as<ASTSelectQuery &>();
+    if (query_info.table_expression_modifiers)
+        return query_info.table_expression_modifiers->hasFinal();
+    else
+        return select.final();
 }
 
 void ReadFromMergeTree::initializePipeline(QueryPipelineBuilder & pipeline, const BuildQueryPipelineSettings &)
@@ -1321,12 +1337,7 @@ void ReadFromMergeTree::initializePipeline(QueryPipelineBuilder & pipeline, cons
     ActionsDAGPtr result_projection;
 
     Names column_names_to_read = std::move(result.column_names_to_read);
-    const auto & select = query_info.query->as<ASTSelectQuery &>();
-    bool final = false;
-    if (query_info.table_expression_modifiers)
-        final = query_info.table_expression_modifiers->hasFinal();
-    else
-        final = select.final();
+    bool final = isQueryWithFinal();
 
     if (!final && result.sampling.use_sampling)
     {
@@ -1345,6 +1356,9 @@ void ReadFromMergeTree::initializePipeline(QueryPipelineBuilder & pipeline, cons
 
     if (final)
     {
+        if (output_each_partition_through_separate_port)
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "Optimisation isn't supposed to be used for queries with final");
+
         /// Add columns needed to calculate the sorting expression and the sign.
         std::vector<String> add_columns = metadata_for_reading->getColumnsRequiredForSortingKey();
         column_names_to_read.insert(column_names_to_read.end(), add_columns.begin(), add_columns.end());
@@ -1364,6 +1378,9 @@ void ReadFromMergeTree::initializePipeline(QueryPipelineBuilder & pipeline, cons
     }
     else if (input_order_info)
     {
+        if (output_each_partition_through_separate_port)
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "Optimisation isn't supposed to be used when reading in order is used");
+
         pipe = spreadMarkRangesAmongStreamsWithOrder(
             std::move(result.parts_with_ranges),
             column_names_to_read,

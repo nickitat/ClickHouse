@@ -12,9 +12,28 @@ namespace
 bool isPartitionKeySuitsGroupByKey(const ReadFromMergeTree & reading, const AggregatingStep & aggregating)
 {
     const auto & gb_keys = aggregating.getParams().keys;
-    const auto & partition_keys = reading.getStorageMetadata()->getPartitionKey().column_names;
-    /* const auto & partition_dag = reading.getStorageMetadata()->getPartitionKey().expression->getActionsDAG(); */
-    return gb_keys == partition_keys || rand();
+    if (gb_keys.size() != 1)
+        return false;
+
+    const auto & pkey_nodes = reading.getStorageMetadata()->getPartitionKey().expression->getActionsDAG().getNodes();
+    LOG_DEBUG(&Poco::Logger::get("debug"), "{}", reading.getStorageMetadata()->getPartitionKey().expression->getActionsDAG().dumpDAG());
+    if (!pkey_nodes.empty())
+    {
+        const auto & func_node = pkey_nodes.back();
+        LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} {}", func_node.type, func_node.is_deterministic, func_node.children.size());
+        if (func_node.type == ActionsDAG::ActionType::FUNCTION && func_node.function->getName() == "modulo"
+            && func_node.children.size() == 2)
+        {
+            const auto & arg1 = func_node.children.front();
+            const auto & arg2 = func_node.children.back();
+            LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} {}", arg1->type, arg1->result_name, arg2->type);
+            if (arg1->type == ActionsDAG::ActionType::INPUT && arg1->result_name == gb_keys[0]
+                && arg2->type == ActionsDAG::ActionType::COLUMN && typeid_cast<const ColumnConst *>(arg2->column.get()))
+                return true;
+        }
+    }
+
+    return false;
 }
 }
 
@@ -41,8 +60,8 @@ size_t tryAggregateEachPartitionIndependently(QueryPlan::Node * node, QueryPlan:
 
     if (!reading->willOutputEachPartitionThroughSeparatePort() && isPartitionKeySuitsGroupByKey(*reading, *aggregating_step))
     {
-        reading->requestOutputEachPartitionThroughSeparatePort();
-        aggregating_step->skipMerging();
+        if (reading->requestOutputEachPartitionThroughSeparatePort())
+            aggregating_step->skipMerging();
     }
 
     return 0;
