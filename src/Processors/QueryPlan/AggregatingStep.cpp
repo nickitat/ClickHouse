@@ -167,8 +167,8 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
     }
 
     /// At least for now...
-    if (skip_merging)
-        params.max_bytes_before_external_group_by = 0;
+    if (params.max_bytes_before_external_group_by)
+        skip_merging = false;
 
     /** Two-level aggregation is useful in two cases:
       * 1. Parallel aggregation is done, and the results should be merged in parallel.
