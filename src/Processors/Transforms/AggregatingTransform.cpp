@@ -158,11 +158,11 @@ protected:
         if (blocks.empty())
             return {};
 
-        LOG_DEBUG(
-            &Poco::Logger::get("debug"),
-            "ConvertingAggregatedToChunksSource pushing bucket #{} {}",
-            blocks.front().info.bucket_num,
-            blocks.front().columns());
+        /* LOG_DEBUG( */
+        /* &Poco::Logger::get("debug"), */
+        /* "ConvertingAggregatedToChunksSource pushing bucket #{} {}", */
+        /* blocks.front().info.bucket_num, */
+        /* blocks.front().columns()); */
         auto res = convertToChunk(blocks.front());
         blocks.pop_front();
         return res;
@@ -677,8 +677,9 @@ void AggregatingTransform::initGenerate()
         }
         else
         {
+            auto prepared_data = params->aggregator.prepareVariantsToMerge(many_data->variants);
             Pipes pipes;
-            for (auto & variant : many_data->variants)
+            for (auto & variant : prepared_data)
                 pipes.emplace_back(std::make_shared<ConvertingAggregatedToChunksSource>(params, variant));
             Pipe pipe = Pipe::unitePipes(std::move(pipes));
             pipe.addTransform(std::make_shared<GroupingAggregatedTransform>(pipe.getHeader(), pipe.numOutputPorts(), params));
