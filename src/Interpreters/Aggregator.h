@@ -921,7 +921,7 @@ public:
         size_t group_by_two_level_threshold_bytes;
 
         /// Settings to flush temporary data to the filesystem (external aggregation).
-        size_t max_bytes_before_external_group_by; /// 0 - do not use external aggregation.
+        const size_t max_bytes_before_external_group_by;        /// 0 - do not use external aggregation.
 
         /// Return empty result when aggregating without keys on empty set.
         bool empty_result_for_aggregation_by_empty_set;

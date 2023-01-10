@@ -166,7 +166,9 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
         params.group_by_two_level_threshold_bytes = 0;
     }
 
-    /// At least for now...
+    /// In case of external aggregation we cannot completely avoid merging,
+    /// because each thread might use multiple hash tables during the execution and then the same key might be present in multiple hash tables.
+    /// But nevertheless we could save some time merging only HTs from the same thread (future task).
     if (params.max_bytes_before_external_group_by)
         skip_merging = false;
 

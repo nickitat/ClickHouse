@@ -12,7 +12,7 @@ namespace
 bool isPartitionKeySuitsGroupByKey(const ReadFromMergeTree & reading, const AggregatingStep & aggregating)
 {
     const auto & gb_keys = aggregating.getParams().keys;
-    if (gb_keys.size() != 1)
+    if (aggregating.isGroupingSets() || gb_keys.size() != 1)
         return false;
 
     const auto & pkey_nodes = reading.getStorageMetadata()->getPartitionKey().expression->getActionsDAG().getNodes();

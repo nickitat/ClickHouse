@@ -209,6 +209,7 @@ private:
     const size_t preferred_max_column_in_block_size_bytes;
     const bool sample_factor_column_queried;
 
+    /// Used for aggregation optimisation (see DB::QueryPlanOptimizations::tryAggregateEachPartitionIndependently).
     bool output_each_partition_through_separate_port = false;
 
     std::shared_ptr<PartitionIdToMaxBlock> max_block_numbers_to_read;

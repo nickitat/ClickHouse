@@ -37,4 +37,6 @@ explain pipeline select a from t3 group by a;
 
 select count() from (select throwIf(count() != 2) from t3 group by a);
 
+select throwIf(count() != 4) from remote('127.0.0.{1,2}', currentDatabase(), t3) group by a format Null;
+
 drop table t3;
