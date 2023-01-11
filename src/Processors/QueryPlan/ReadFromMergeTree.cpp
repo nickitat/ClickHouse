@@ -480,14 +480,6 @@ static Pipe runForEachPartition(
     {
         num_streams = std::max<size_t>(1, num_streams / countPartitions(parts_with_ranges));
 
-        LOG_DEBUG(
-            &Poco::Logger::get("debug"),
-            "{} {} {} {}",
-            demangle(typeid(ReadFunc).name()).substr(0, 60),
-            parts_with_ranges.size(),
-            requested_num_streams,
-            countPartitions(parts_with_ranges));
-
         Pipes pipes;
         for (auto begin = parts_with_ranges.begin(); begin != parts_with_ranges.end();)
         {
@@ -495,13 +487,6 @@ static Pipe runForEachPartition(
                 begin,
                 parts_with_ranges.end(),
                 [&begin](auto & part) { return begin->data_part->info.partition_id != part.data_part->info.partition_id; });
-
-            LOG_DEBUG(
-                &Poco::Logger::get("debug"),
-                "{} {} {}",
-                demangle(typeid(ReadFunc).name()).substr(0, 60),
-                begin->data_part->info.partition_id,
-                end - begin);
 
             RangesInDataParts partition_parts;
             partition_parts.insert(partition_parts.end(), std::make_move_iterator(begin), std::make_move_iterator(end));
