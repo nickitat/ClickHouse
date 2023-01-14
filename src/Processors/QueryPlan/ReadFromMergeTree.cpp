@@ -43,24 +43,37 @@ using namespace DB;
 
 namespace
 {
-size_t countPartitions(const DB::RangesInDataParts & parts_with_ranges)
+template <typename Container, typename Getter>
+size_t countPartitions(const Container & parts, Getter get_partition_id)
 {
     assert(!parts_with_ranges.empty());
-    String cur_partition_id = parts_with_ranges[0].data_part->info.partition_id;
+    String cur_partition_id = get_partition_id(parts[0]);
     size_t unique_partitions = 1;
-    for (size_t i = 1; i < parts_with_ranges.size(); ++i)
+    for (size_t i = 1; i < parts.size(); ++i)
     {
-        if (parts_with_ranges[i].data_part->info.partition_id != cur_partition_id)
+        if (get_partition_id(parts[i]) != cur_partition_id)
         {
             ++unique_partitions;
-            cur_partition_id = parts_with_ranges[i].data_part->info.partition_id;
+            cur_partition_id = get_partition_id(parts[i]);
         }
     }
     return unique_partitions;
 }
 
+size_t countPartitions(const RangesInDataParts & parts_with_ranges)
+{
+    auto get_partition_id = [](const RangesInDataPart & rng) { return rng.data_part->info.partition_id; };
+    return countPartitions(parts_with_ranges, get_partition_id);
+}
+
+size_t countPartitions(const MergeTreeData::DataPartsVector & prepared_parts)
+{
+    auto get_partition_id = [](const MergeTreeData::DataPartPtr data_part) { return data_part->info.partition_id; };
+    return countPartitions(prepared_parts, get_partition_id);
+}
+
 template <typename ReadFunc>
-Pipe runPerPartitionIfNeeded(
+Pipe outputPerPartitionIfRequested(
     RangesInDataParts && parts_with_ranges, size_t num_streams, bool output_each_partition_through_separate_port, ReadFunc read)
 {
     if (parts_with_ranges.empty())
@@ -508,7 +521,8 @@ Pipe ReadFromMergeTree::spreadMarkRangesAmongStreams(RangesInDataParts && parts_
     {
         return spreadMarkRangesAmongStreamsImpl(std::move(parts_with_ranges_), column_names, num_streams_);
     };
-    return runPerPartitionIfNeeded(std::move(parts_with_ranges), requested_num_streams, output_each_partition_through_separate_port, read);
+    return outputPerPartitionIfRequested(
+        std::move(parts_with_ranges), requested_num_streams, output_each_partition_through_separate_port, read);
 }
 
 static ActionsDAGPtr createProjection(const Block & header)
@@ -748,8 +762,8 @@ Pipe ReadFromMergeTree::spreadMarkRangesAmongStreamsWithOrder(
         return spreadMarkRangesAmongStreamsWithOrderImpl(
             std::move(parts_with_ranges_), column_names, input_order_info, num_streams_, need_preliminary_merge);
     };
-    Pipe pipe
-        = runPerPartitionIfNeeded(std::move(parts_with_ranges), requested_num_streams, output_each_partition_through_separate_port, read);
+    Pipe pipe = outputPerPartitionIfRequested(
+        std::move(parts_with_ranges), requested_num_streams, output_each_partition_through_separate_port, read);
 
     if (!pipe.empty() && (need_preliminary_merge || have_input_columns_removed_after_prewhere))
         /// Drop temporary columns, added by 'sorting_key_prefix_expr'
@@ -1300,6 +1314,18 @@ bool ReadFromMergeTree::requestOutputEachPartitionThroughSeparatePort()
 {
     if (isQueryWithFinal())
         return false;
+
+    const auto & settings = context->getSettingsRef();
+
+    const auto partitions_cnt = countPartitions(prepared_parts);
+    if (partitions_cnt < settings.max_threads / 20000)
+    {
+        LOG_TRACE(log, "no cartoons");
+        return false;
+    }
+
+    /* size_t min_marks_in_partition = -1; */
+    /* size_t max_marks_in_partition = 0; */
 
     return output_each_partition_through_separate_port = true;
 }
