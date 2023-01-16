@@ -3,8 +3,8 @@
 #include <Processors/QueryPlan/AggregatingStep.h>
 #include <Processors/QueryPlan/ExpressionStep.h>
 #include <Processors/QueryPlan/FilterStep.h>
+#include <Processors/QueryPlan/Optimizations/actionsDAGUtils.h>
 #include <Processors/QueryPlan/ReadFromMergeTree.h>
-#include <__algorithm/ranges_any_of.h>
 
 #include <stack>
 #include <unordered_map>
@@ -15,6 +15,7 @@ namespace
 {
 
 using NodeSet = std::unordered_set<const ActionsDAG::Node *>;
+using NodeMap = std::unordered_map<const ActionsDAG::Node *, bool>;
 
 struct Frame
 {
@@ -50,7 +51,7 @@ bool isInjectiveFunction(const ActionsDAG::Node * node)
 }
 
 void removeInjectiveColumnsFromResultsRecursively(
-    const ActionsDAGPtr & actions, const ActionsDAG::Node * cur_node, NodeSet & irreducible, NodeSet & visited, bool & invalid)
+    const ActionsDAGPtr & actions, const ActionsDAG::Node * cur_node, NodeSet & irreducible, NodeSet & visited)
 {
     if (visited.contains(cur_node))
         return;
@@ -62,10 +63,9 @@ void removeInjectiveColumnsFromResultsRecursively(
     {
         case ActionsDAG::ActionType::ALIAS:
             assert(cur_node->children.size() == 1);
-            removeInjectiveColumnsFromResultsRecursively(actions, cur_node->children.at(0), irreducible, visited, invalid);
+            removeInjectiveColumnsFromResultsRecursively(actions, cur_node->children.at(0), irreducible, visited);
             break;
         case ActionsDAG::ActionType::ARRAY_JOIN:
-            invalid = true;
             break;
         case ActionsDAG::ActionType::COLUMN:
             irreducible.insert(cur_node);
@@ -76,7 +76,7 @@ void removeInjectiveColumnsFromResultsRecursively(
                 irreducible.insert(cur_node);
             else
                 for (const auto & child : cur_node->children)
-                    removeInjectiveColumnsFromResultsRecursively(actions, child, irreducible, visited, invalid);
+                    removeInjectiveColumnsFromResultsRecursively(actions, child, irreducible, visited);
             break;
         case ActionsDAG::ActionType::INPUT:
             irreducible.insert(cur_node);
@@ -85,20 +85,83 @@ void removeInjectiveColumnsFromResultsRecursively(
 }
 
 /// Removes injective functions recursively from result columns until it is no longer possible.
-bool removeInjectiveColumnsFromResultsRecursively(ActionsDAGPtr actions)
+NodeSet removeInjectiveColumnsFromResultsRecursively(ActionsDAGPtr actions)
 {
     NodeSet irreducible;
     NodeSet visited;
-    bool invalid = false;
 
     for (const auto & node : actions->getOutputs())
-        removeInjectiveColumnsFromResultsRecursively(actions, node, irreducible, visited, invalid);
+        removeInjectiveColumnsFromResultsRecursively(actions, node, irreducible, visited);
 
     LOG_DEBUG(&Poco::Logger::get("debug"), "irreducible nodes:");
     for (const auto & node : irreducible)
         print_node(node);
 
-    return invalid;
+    return irreducible;
+}
+
+bool allOutputsCovered(
+    const ActionsDAGPtr & partition_actions,
+    const NodeSet & irreducible_nodes,
+    const MatchedTrees::Matches & matches,
+    const ActionsDAG::Node * cur_node,
+    NodeMap & visited)
+{
+    if (visited.contains(cur_node))
+        return visited[cur_node];
+
+    auto has_match_in_group_by_actions = [&irreducible_nodes, &matches, &cur_node]()
+    {
+        if (matches.contains(cur_node))
+        {
+            if (const auto * node_in_gb_actions = matches.at(cur_node).node;
+                node_in_gb_actions && node_in_gb_actions->type == cur_node->type)
+            {
+                return irreducible_nodes.contains(node_in_gb_actions);
+            }
+        }
+        return false;
+    };
+
+    bool res = has_match_in_group_by_actions();
+    if (!res)
+    {
+        switch (cur_node->type)
+        {
+            case ActionsDAG::ActionType::ALIAS:
+                assert(cur_node->children.size() == 1);
+                res = allOutputsCovered(partition_actions, irreducible_nodes, matches, cur_node->children.at(0), visited);
+                break;
+            case ActionsDAG::ActionType::ARRAY_JOIN:
+                break;
+            case ActionsDAG::ActionType::COLUMN:
+                /// Constants doesn't matter, so let's always consider them matched.
+                res = true;
+                break;
+            case ActionsDAG::ActionType::FUNCTION:
+                res = true;
+                for (const auto & child : cur_node->children)
+                    res &= allOutputsCovered(partition_actions, irreducible_nodes, matches, child, visited);
+                break;
+            case ActionsDAG::ActionType::INPUT:
+                break;
+        }
+    }
+    print_node(cur_node);
+    LOG_DEBUG(&Poco::Logger::get("debug"), "res={}", res);
+    visited[cur_node] = res;
+    return res;
+}
+
+bool allOutputsCovered(ActionsDAGPtr partition_actions, const NodeSet & irreducible_nodes, const MatchedTrees::Matches & matches)
+{
+    NodeMap visited;
+
+    bool res = true;
+    for (const auto & node : partition_actions->getOutputs())
+        if (node->type != ActionsDAG::ActionType::INPUT)
+            res &= allOutputsCovered(partition_actions, irreducible_nodes, matches, node, visited);
+    return res;
 }
 
 bool isPartitionKeySuitsGroupByKey(const ReadFromMergeTree & reading, ActionsDAGPtr group_by_actions, const AggregatingStep & aggregating)
@@ -106,7 +169,7 @@ bool isPartitionKeySuitsGroupByKey(const ReadFromMergeTree & reading, ActionsDAG
     /// 0. Partition key columns should be a subset of group by key columns.
     /// 1. Optimization is applicable if partition by expression is a deterministic function of col1, ..., coln and group by keys are injective functions of some of col1, ..., coln.
 
-    if (aggregating.isGroupingSets() || group_by_actions->hasStatefulFunctions())
+    if (aggregating.isGroupingSets() || group_by_actions->hasArrayJoin() || group_by_actions->hasStatefulFunctions())
         return false;
 
     /// Check that PK columns is a subset of GBK columns.
@@ -126,31 +189,46 @@ bool isPartitionKeySuitsGroupByKey(const ReadFromMergeTree & reading, ActionsDAG
     LOG_DEBUG(&Poco::Logger::get("debug"), "group by actions before:\n{}", group_by_actions->dumpDAG());
     LOG_DEBUG(&Poco::Logger::get("debug"), "partition by actions before:\n{}", partition_actions->dumpDAG());
 
-    /// For cases like `partition by col + group by col+1` or `partition by hash(col) + group by hash(col)`
-    if (removeInjectiveColumnsFromResultsRecursively(group_by_actions))
-        return false;
+    /// We are interested only in calculations required to obtain group by keys.
+    group_by_actions->removeUnusedActions(aggregating.getParams().keys);
 
     LOG_DEBUG(&Poco::Logger::get("debug"), "group by actions after:\n{}", group_by_actions->dumpDAG());
     LOG_DEBUG(&Poco::Logger::get("debug"), "partition by actions after:\n{}", partition_actions->dumpDAG());
 
-    const auto & pkey_nodes = reading.getStorageMetadata()->getPartitionKey().expression->getActionsDAG().getNodes();
-    if (!pkey_nodes.empty())
+    /// For cases like `partition by col + group by col+1` or `partition by hash(col) + group by hash(col)`
+    const auto irreducibe_nodes = removeInjectiveColumnsFromResultsRecursively(group_by_actions);
+
+    const auto matches = matchTrees(*group_by_actions, *partition_actions);
+    LOG_DEBUG(&Poco::Logger::get("debug"), "matches:");
+    for (const auto & match : matches)
     {
-        const auto & func_node = pkey_nodes.back();
-        LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} {}", func_node.type, func_node.is_deterministic, func_node.children.size());
-        if (func_node.type == ActionsDAG::ActionType::FUNCTION && func_node.function->getName() == "modulo"
-            && func_node.children.size() == 2)
-        {
-            const auto & arg1 = func_node.children.front();
-            const auto & arg2 = func_node.children.back();
-            LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} {}", arg1->type, arg1->result_name, arg2->type);
-            if (arg1->type == ActionsDAG::ActionType::INPUT && arg1->result_name == gb_keys[0]
-                && arg2->type == ActionsDAG::ActionType::COLUMN && typeid_cast<const ColumnConst *>(arg2->column.get()))
-                return true;
-        }
+        if (match.first)
+            print_node(match.first);
+        if (match.second.node)
+            print_node(match.second.node);
+        LOG_DEBUG(&Poco::Logger::get("debug"), "----------------");
     }
 
-    return false;
+    const bool res = allOutputsCovered(partition_actions, irreducibe_nodes, matches);
+    LOG_DEBUG(&Poco::Logger::get("debug"), "result={}", res);
+    return res;
+
+    /* const auto & pkey_nodes = reading.getStorageMetadata()->getPartitionKey().expression->getActionsDAG().getNodes(); */
+    /* if (!pkey_nodes.empty()) */
+    /* { */
+    /* const auto & func_node = pkey_nodes.back(); */
+    /* LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} {}", func_node.type, func_node.is_deterministic, func_node.children.size()); */
+    /* if (func_node.type == ActionsDAG::ActionType::FUNCTION && func_node.function->getName() == "modulo" */
+    /* && func_node.children.size() == 2) */
+    /* { */
+    /* const auto & arg1 = func_node.children.front(); */
+    /* const auto & arg2 = func_node.children.back(); */
+    /* LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} {}", arg1->type, arg1->result_name, arg2->type); */
+    /* if (arg1->type == ActionsDAG::ActionType::INPUT && arg1->result_name == gb_keys[0] */
+    /* && arg2->type == ActionsDAG::ActionType::COLUMN && typeid_cast<const ColumnConst *>(arg2->column.get())) */
+    /* return true; */
+    /* } */
+    /* } */
 }
 }
 
