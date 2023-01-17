@@ -174,6 +174,9 @@ bool isPartitionKeySuitsGroupByKey(const ReadFromMergeTree & reading, ActionsDAG
 
     /// Check that PK columns is a subset of GBK columns.
     const auto partition_actions = reading.getStorageMetadata()->getPartitionKey().expression->getActionsDAG().clone();
+
+    /// We are interested only in calculations required to obtain group by keys.
+    group_by_actions->removeUnusedActions(aggregating.getParams().keys);
     const auto & gb_keys = group_by_actions->getRequiredColumnsNames();
 
     LOG_DEBUG(&Poco::Logger::get("debug"), "group by req cols: {}", fmt::join(gb_keys, ", "));
@@ -188,9 +191,6 @@ bool isPartitionKeySuitsGroupByKey(const ReadFromMergeTree & reading, ActionsDAG
     /* /// We will work only with subexpression that depends on partition key columns. */
     LOG_DEBUG(&Poco::Logger::get("debug"), "group by actions before:\n{}", group_by_actions->dumpDAG());
     LOG_DEBUG(&Poco::Logger::get("debug"), "partition by actions before:\n{}", partition_actions->dumpDAG());
-
-    /// We are interested only in calculations required to obtain group by keys.
-    group_by_actions->removeUnusedActions(aggregating.getParams().keys);
 
     LOG_DEBUG(&Poco::Logger::get("debug"), "group by actions after:\n{}", group_by_actions->dumpDAG());
     LOG_DEBUG(&Poco::Logger::get("debug"), "partition by actions after:\n{}", partition_actions->dumpDAG());
@@ -212,23 +212,6 @@ bool isPartitionKeySuitsGroupByKey(const ReadFromMergeTree & reading, ActionsDAG
     const bool res = allOutputsCovered(partition_actions, irreducibe_nodes, matches);
     LOG_DEBUG(&Poco::Logger::get("debug"), "result={}", res);
     return res;
-
-    /* const auto & pkey_nodes = reading.getStorageMetadata()->getPartitionKey().expression->getActionsDAG().getNodes(); */
-    /* if (!pkey_nodes.empty()) */
-    /* { */
-    /* const auto & func_node = pkey_nodes.back(); */
-    /* LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} {}", func_node.type, func_node.is_deterministic, func_node.children.size()); */
-    /* if (func_node.type == ActionsDAG::ActionType::FUNCTION && func_node.function->getName() == "modulo" */
-    /* && func_node.children.size() == 2) */
-    /* { */
-    /* const auto & arg1 = func_node.children.front(); */
-    /* const auto & arg2 = func_node.children.back(); */
-    /* LOG_DEBUG(&Poco::Logger::get("debug"), "{} {} {}", arg1->type, arg1->result_name, arg2->type); */
-    /* if (arg1->type == ActionsDAG::ActionType::INPUT && arg1->result_name == gb_keys[0] */
-    /* && arg2->type == ActionsDAG::ActionType::COLUMN && typeid_cast<const ColumnConst *>(arg2->column.get())) */
-    /* return true; */
-    /* } */
-    /* } */
 }
 }
 
