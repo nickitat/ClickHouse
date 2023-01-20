@@ -77,7 +77,11 @@ size_t countPartitions(const MergeTreeData::DataPartsVector & prepared_parts)
 
 template <typename ReadFunc>
 Pipe outputPerPartitionIfRequested(
-    RangesInDataParts && parts_with_ranges, size_t num_streams, bool output_each_partition_through_separate_port, ReadFunc read)
+    RangesInDataParts && parts_with_ranges,
+    size_t num_streams,
+    size_t max_threads,
+    bool output_each_partition_through_separate_port,
+    ReadFunc read)
 {
     if (parts_with_ranges.empty())
         return {};
@@ -88,15 +92,19 @@ Pipe outputPerPartitionIfRequested(
     }
     else
     {
+        LOG_DEBUG(&Poco::Logger::get("debug"), "requested num_streams: {}", num_streams);
+        const size_t partitions_per_thread = std::max<size_t>(1, countPartitions(parts_with_ranges) / max_threads);
         num_streams = std::max<size_t>(1, num_streams / countPartitions(parts_with_ranges));
 
         Pipes pipes;
         for (auto begin = parts_with_ranges.begin(); begin != parts_with_ranges.end();)
         {
-            const auto end = std::find_if(
-                begin,
-                parts_with_ranges.end(),
-                [&begin](const auto & part) { return begin->data_part->info.partition_id != part.data_part->info.partition_id; });
+            auto end = begin;
+            for (size_t i = 0; i < partitions_per_thread; ++i)
+                end = std::find_if(
+                    end,
+                    parts_with_ranges.end(),
+                    [&end](const auto & part) { return end->data_part->info.partition_id != part.data_part->info.partition_id; });
 
             RangesInDataParts partition_parts{std::make_move_iterator(begin), std::make_move_iterator(end)};
 
@@ -520,12 +528,13 @@ Pipe ReadFromMergeTree::spreadMarkRangesAmongStreamsImpl(
 
 Pipe ReadFromMergeTree::spreadMarkRangesAmongStreams(RangesInDataParts && parts_with_ranges, const Names & column_names)
 {
+    const auto & settings = context->getSettingsRef();
     auto read = [this, &column_names](RangesInDataParts && parts_with_ranges_, size_t num_streams_)
     {
         return spreadMarkRangesAmongStreamsImpl(std::move(parts_with_ranges_), column_names, num_streams_);
     };
     return outputPerPartitionIfRequested(
-        std::move(parts_with_ranges), requested_num_streams, output_each_partition_through_separate_port, read);
+        std::move(parts_with_ranges), requested_num_streams, settings.max_threads, output_each_partition_through_separate_port, read);
 }
 
 static ActionsDAGPtr createProjection(const Block & header)
@@ -766,7 +775,7 @@ Pipe ReadFromMergeTree::spreadMarkRangesAmongStreamsWithOrder(
             std::move(parts_with_ranges_), column_names, input_order_info, num_streams_, need_preliminary_merge);
     };
     Pipe pipe = outputPerPartitionIfRequested(
-        std::move(parts_with_ranges), requested_num_streams, output_each_partition_through_separate_port, read);
+        std::move(parts_with_ranges), requested_num_streams, settings.max_threads, output_each_partition_through_separate_port, read);
 
     if (!pipe.empty() && (need_preliminary_merge || have_input_columns_removed_after_prewhere))
         /// Drop temporary columns, added by 'sorting_key_prefix_expr'
