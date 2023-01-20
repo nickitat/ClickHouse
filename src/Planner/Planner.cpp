@@ -287,6 +287,7 @@ void addAggregationStep(QueryPlan & query_plan,
         : static_cast<size_t>(settings.max_threads);
 
     bool storage_has_evenly_distributed_read = false;
+    bool is_remote_storage = false;
     const auto & table_expression_node_to_data = planner_context->getTableExpressionNodeToData();
 
     if (table_expression_node_to_data.size() == 1)
@@ -297,6 +298,7 @@ void addAggregationStep(QueryPlan & query_plan,
             storage_has_evenly_distributed_read = table_node->getStorage()->hasEvenlyDistributedRead();
         else if (const auto * table_function_node = table_expression_node->as<TableFunctionNode>())
             storage_has_evenly_distributed_read = table_function_node->getStorageOrThrow()->hasEvenlyDistributedRead();
+        is_remote_storage = it->second.isRemote();
     }
 
     auto aggregating_step = std::make_unique<AggregatingStep>(
@@ -313,7 +315,8 @@ void addAggregationStep(QueryPlan & query_plan,
         std::move(sort_description_for_merging),
         std::move(group_by_sort_description),
         query_analysis_result.aggregation_should_produce_results_in_order_of_bucket_number,
-        settings.enable_memory_bound_merging_of_aggregation_results);
+        settings.enable_memory_bound_merging_of_aggregation_results,
+        is_remote_storage);
     query_plan.addStep(std::move(aggregating_step));
 }
 

@@ -6,6 +6,8 @@
 #include <Processors/Transforms/MergingAggregatedMemoryEfficientTransform.h>
 #include <Core/ProtocolDefines.h>
 
+#include <Processors/Transforms/SquashingChunksTransform.h>
+
 namespace ProfileEvents
 {
     extern const Event ExternalAggregationMerge;
@@ -150,10 +152,11 @@ public:
 protected:
     Chunk generate() override
     {
-        if (!convertion_is_done)
+        if (current_bucket_num < 256)
         {
-            blocks = params->aggregator.convertToBlocks(*variant, params->final, 1 /* max_threads */);
-            convertion_is_done = true;
+            Arena * arena = variant->aggregates_pool;
+            Block block = params->aggregator.convertOneBucketToBlock(*variant, arena, params->final, current_bucket_num++, nullptr);
+            blocks.push_back(block);
         }
 
         if (blocks.empty())
@@ -168,7 +171,7 @@ private:
     AggregatingTransformParamsPtr params;
     AggregatedDataVariantsPtr variant;
 
-    bool convertion_is_done = false;
+    Int32 current_bucket_num = 0;
     BlocksList blocks;
 };
 
@@ -725,6 +728,8 @@ void AggregatingTransform::initGenerate()
             }
             else
             {
+                pipe.addSimpleTransform([this](const Block & header)
+                                        { return std::make_shared<SquashingChunksTransform>(header, params->params.max_block_size, 0); });
                 /// AggregatingTransform::expandPipeline expects single output port.
                 /// It's not a big problem because we do resize() to max_threads after AggregatingTransform.
                 pipe.resize(1);

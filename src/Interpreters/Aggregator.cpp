@@ -219,7 +219,7 @@ void initDataVariantsWithSizeHint(
         if (auto hint = getHashTablesStatistics().getSizeHint(stats_collecting_params))
         {
             const auto max_threads = params.group_by_two_level_threshold != 0 ? std::max(params.max_threads, 1ul) : 1;
-            const auto lower_limit = hint->sum_of_sizes / max_threads;
+            const auto lower_limit = hint->median_size; // hint->sum_of_sizes / max_threads;
             const auto upper_limit = stats_collecting_params.max_size_to_preallocate_for_aggregation / max_threads;
             if (hint->median_size > upper_limit)
             {
@@ -237,8 +237,14 @@ void initDataVariantsWithSizeHint(
             else if ((max_threads > 1 && hint->sum_of_sizes > 100'000) || hint->sum_of_sizes > 500'000)
             {
                 const auto adjusted = std::max(lower_limit, hint->median_size);
+                /// We decide if convertion to two-level will be profitable based on the sum_of_sizes, because either:
+                /// * convertion will happen anyway if at least one of the HTs will grow beyond threshold during query execution (with penalty for reinserting elements)
+                /// * we will merge all HTs in a single thread if they all remain to be single-level
+                /// We would like to avoid any of those scenarious for any big HT and thus look at the sum_of_sizes.
+                /// Situation changes when we know, that there will be no merging at the end.
                 if (worthConvertToTwoLevel(
                         params.group_by_two_level_threshold,
+                        // !params.merging_skipped ? hint->sum_of_sizes : adjusted,
                         hint->sum_of_sizes,
                         /*group_by_two_level_threshold_bytes*/ 0,
                         /*result_size_bytes*/ 0))
@@ -1669,11 +1675,7 @@ Block Aggregator::convertOneBucketToBlock(
 }
 
 Block Aggregator::mergeAndConvertOneBucketToBlock(
-    ManyAggregatedDataVariants & variants,
-    Arena * arena,
-    bool final,
-    Int32 bucket,
-    std::atomic<bool> * is_cancelled) const
+    ManyAggregatedDataVariants & variants, Arena * arena, bool final, Int32 bucket, std::atomic<bool> *) const
 {
     auto & merged_data = *variants[0];
     auto method = merged_data.type;
@@ -1684,8 +1686,6 @@ Block Aggregator::mergeAndConvertOneBucketToBlock(
     else if (method == AggregatedDataVariants::Type::NAME) \
     { \
         mergeBucketImpl<decltype(merged_data.NAME)::element_type>(variants, bucket, arena); \
-        if (is_cancelled && is_cancelled->load(std::memory_order_seq_cst)) \
-            return {}; \
         block = convertOneBucketToBlock(merged_data, *merged_data.NAME, arena, final, bucket); \
     }
 
@@ -1695,6 +1695,26 @@ Block Aggregator::mergeAndConvertOneBucketToBlock(
     return block;
 }
 
+Block Aggregator::convertOneBucketToBlock(
+    AggregatedDataVariants & variants, Arena * arena, bool final, Int32 bucket, std::atomic<bool> *) const
+{
+    auto method = variants.type;
+    Block block;
+
+    if (false)
+    {
+    } // NOLINT
+#define M(NAME) \
+    else if (method == AggregatedDataVariants::Type::NAME) \
+    { \
+        block = convertOneBucketToBlock(variants, *variants.NAME, arena, final, bucket); \
+    }
+
+    APPLY_FOR_VARIANTS_TWO_LEVEL(M)
+#undef M
+
+    return block;
+}
 
 template <typename Method>
 void Aggregator::writeToTemporaryFileImpl(

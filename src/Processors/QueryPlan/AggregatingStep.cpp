@@ -101,10 +101,12 @@ AggregatingStep::AggregatingStep(
     SortDescription sort_description_for_merging_,
     SortDescription group_by_sort_description_,
     bool should_produce_results_in_order_of_bucket_number_,
-    bool memory_bound_merging_of_aggregation_results_enabled_)
+    bool memory_bound_merging_of_aggregation_results_enabled_,
+    bool is_distributed_)
     : ITransformingStep(
         input_stream_,
-        appendGroupingColumn(params_.getHeader(input_stream_.header, final_), params_.keys, !grouping_sets_params_.empty(), group_by_use_nulls_),
+        appendGroupingColumn(
+            params_.getHeader(input_stream_.header, final_), params_.keys, !grouping_sets_params_.empty(), group_by_use_nulls_),
         getTraits(should_produce_results_in_order_of_bucket_number_),
         false)
     , params(std::move(params_))
@@ -120,6 +122,7 @@ AggregatingStep::AggregatingStep(
     , group_by_sort_description(std::move(group_by_sort_description_))
     , should_produce_results_in_order_of_bucket_number(should_produce_results_in_order_of_bucket_number_)
     , memory_bound_merging_of_aggregation_results_enabled(memory_bound_merging_of_aggregation_results_enabled_)
+    , is_distributed(is_distributed_)
 {
     if (memoryBoundMergingWillBeUsed())
     {
@@ -166,11 +169,15 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
         params.group_by_two_level_threshold_bytes = 0;
     }
 
+    /// We cannot assign this setting during params creation in InterpreterSelectQuery because it will be determined later by the corresponding query plan optimization.
+    params.merging_skipped = skip_merging;
+
     /** Two-level aggregation is useful in two cases:
       * 1. Parallel aggregation is done, and the results should be merged in parallel.
       * 2. An aggregation is done with store of temporary data on the disk, and they need to be merged in a memory efficient way.
       */
     const auto src_header = pipeline.getHeader();
+    (void)is_distributed;
     auto transform_params = std::make_shared<AggregatingTransformParams>(src_header, std::move(params), final);
 
     if (!grouping_sets_params.empty())

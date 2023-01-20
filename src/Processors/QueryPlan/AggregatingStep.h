@@ -40,7 +40,8 @@ public:
         SortDescription sort_description_for_merging_,
         SortDescription group_by_sort_description_,
         bool should_produce_results_in_order_of_bucket_number_,
-        bool memory_bound_merging_of_aggregation_results_enabled_);
+        bool memory_bound_merging_of_aggregation_results_enabled_,
+        bool is_distributed_);
 
     static Block appendGroupingColumn(Block block, const Names & keys, bool has_grouping, bool use_nulls);
 
@@ -86,6 +87,8 @@ private:
     /// These settings are used to determine if we should resize pipeline to 1 at the end.
     bool should_produce_results_in_order_of_bucket_number;
     bool memory_bound_merging_of_aggregation_results_enabled;
+
+    bool is_distributed;
 
     Processors aggregating_in_order;
     Processors aggregating_sorted;

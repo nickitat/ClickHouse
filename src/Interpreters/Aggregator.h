@@ -942,6 +942,9 @@ public:
 
         bool enable_prefetch;
 
+        /// Value is assigned in AggregatingStep.
+        bool merging_skipped = false;
+
         struct StatsCollectingParams
         {
             StatsCollectingParams();
@@ -1303,6 +1306,9 @@ private:
         Arena * arena,
         bool final,
         Int32 bucket) const;
+
+    Block convertOneBucketToBlock(
+        AggregatedDataVariants & variants, Arena * arena, bool final, Int32 bucket, std::atomic<bool> * is_cancelled) const;
 
     Block mergeAndConvertOneBucketToBlock(
         ManyAggregatedDataVariants & variants,
