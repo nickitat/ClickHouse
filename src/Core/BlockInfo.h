@@ -34,11 +34,11 @@ struct BlockInfo
       */
 
 #define APPLY_FOR_BLOCK_INFO_FIELDS(M) \
-    M(bool,     is_overflows,       false,  1) \
-    M(Int32,    bucket_num,         -1,     2) \
-    M(bool,     is_bucket_sorted,   false,  3)
+    M(bool,     is_overflows,       false,  1, 0) \
+    M(Int32,    bucket_num,         -1,     2, 0) \
+    M(bool,     is_bucket_sorted,   false,  3, 54470)
 
-#define DECLARE_FIELD(TYPE, NAME, DEFAULT, FIELD_NUM) \
+#define DECLARE_FIELD(TYPE, NAME, DEFAULT, FIELD_NUM, MIN_SUPPORTED_REVISION) \
     TYPE NAME = DEFAULT;
 
     APPLY_FOR_BLOCK_INFO_FIELDS(DECLARE_FIELD)
@@ -46,7 +46,7 @@ struct BlockInfo
 #undef DECLARE_FIELD
 
     /// Write the values in binary form. NOTE: You could use protobuf, but it would be overkill for this case.
-    void write(WriteBuffer & out) const;
+    void write(WriteBuffer & out, size_t revision) const;
 
     /// Read the values in binary form.
     void read(ReadBuffer & in);

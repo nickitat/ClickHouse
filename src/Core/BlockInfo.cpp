@@ -18,12 +18,15 @@ namespace ErrorCodes
 
 
 /// Write values in binary form. NOTE: You could use protobuf, but it would be overkill for this case.
-void BlockInfo::write(WriteBuffer & out) const
+void BlockInfo::write(WriteBuffer & out, size_t revision) const
 {
 /// Set of pairs `FIELD_NUM`, value in binary form. Then 0.
-#define WRITE_FIELD(TYPE, NAME, DEFAULT, FIELD_NUM) \
-    writeVarUInt(FIELD_NUM, out); \
-    writeBinary(NAME, out);
+#define WRITE_FIELD(TYPE, NAME, DEFAULT, FIELD_NUM, MIN_SUPPORTED_REVISION) \
+    if (revision >= (MIN_SUPPORTED_REVISION)) \
+    { \
+        writeVarUInt(FIELD_NUM, out); \
+        writeBinary(NAME, out); \
+    }
 
     APPLY_FOR_BLOCK_INFO_FIELDS(WRITE_FIELD)
 
@@ -44,7 +47,7 @@ void BlockInfo::read(ReadBuffer & in)
 
         switch (field_num)
         {
-        #define READ_FIELD(TYPE, NAME, DEFAULT, FIELD_NUM) \
+        #define READ_FIELD(TYPE, NAME, DEFAULT, FIELD_NUM, _) \
             case FIELD_NUM: \
                 readBinary(NAME, in); \
                 break;

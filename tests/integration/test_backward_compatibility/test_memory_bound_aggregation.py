@@ -3,14 +3,14 @@ import pytest
 from helpers.cluster import ClickHouseCluster
 
 cluster = ClickHouseCluster(__file__)
-# node1 = cluster.add_instance(
-#    "node1",
-#    with_zookeeper=False,
-#    image="yandex/clickhouse-server",
-#    tag="21.1",
-#    stay_alive=True,
-#    with_installed_binary=True,
-# )
+node1 = cluster.add_instance(
+    "node1",
+    with_zookeeper=False,
+    image="yandex/clickhouse-server",
+    tag="21.1",
+    stay_alive=True,
+    with_installed_binary=True,
+)
 node2 = cluster.add_instance("node2", with_zookeeper=False)
 node3 = cluster.add_instance(
     "node3", user_configs=["configs/users.d/config.xml"], with_zookeeper=False
@@ -78,7 +78,7 @@ def run_query_with_settings(node, query, user_settings={}):
 
 
 def test_remote_node_sends_multiple_single_level_tables_from_ordinary_aggregation(
-    start_cluster
+    start_cluster,
 ):
     node2.query("create table t (a UInt64) engine = MergeTree order by tuple()")
     node3.query("create table t (a UInt64) engine = MergeTree order by tuple()")
@@ -107,7 +107,7 @@ def test_remote_node_sends_multiple_single_level_tables_from_ordinary_aggregatio
 
 
 def test_remote_node_sends_multiple_single_level_tables_from_aggregation_in_order(
-    start_cluster
+    start_cluster,
 ):
     node2.query("create table t (a UInt64) engine = MergeTree order by tuple()")
     node3.query("create table t (a UInt64) engine = MergeTree order by a")
@@ -135,3 +135,51 @@ def test_remote_node_sends_multiple_single_level_tables_from_aggregation_in_orde
 
     node2.query("drop table t")
     node3.query("drop table t")
+
+
+def test_old_initiator_and_new_remote_node(start_cluster):
+    node1.query("create table t (a UInt64) engine = MergeTree order by tuple()")
+    node2.query("create table t (a UInt64) engine = MergeTree order by tuple()")
+
+    node1.query("insert into t select number % 100000 from numbers_mt(1000000)")
+    node2.query("insert into t select number % 100000 from numbers_mt(1000000)")
+
+    assert (
+        run_query_with_settings(
+            node1,
+            """
+            select throwIf(count() != 20)
+            from remote('node{1,2}', default, t)
+            group by a
+            format Null
+        """,
+        )
+        == ""
+    )
+
+    node1.query("drop table t")
+    node2.query("drop table t")
+
+
+def test_new_initiator_and_old_remote_node(start_cluster):
+    node1.query("create table t (a UInt64) engine = MergeTree order by tuple()")
+    node2.query("create table t (a UInt64) engine = MergeTree order by tuple()")
+
+    node1.query("insert into t select number % 100000 from numbers_mt(1000000)")
+    node2.query("insert into t select number % 100000 from numbers_mt(1000000)")
+
+    assert (
+        run_query_with_settings(
+            node2,
+            """
+            select throwIf(count() != 20)
+            from remote('node{1,2}', default, t)
+            group by a
+            format Null
+        """,
+        )
+        == ""
+    )
+
+    node1.query("drop table t")
+    node2.query("drop table t")
