@@ -148,7 +148,7 @@ void AggregatingStep::transformPipeline(QueryPipelineBuilder & pipeline, const B
     /// Forget about current totals and extremes. They will be calculated again after aggregation if needed.
     pipeline.dropTotalsAndExtremes();
 
-    bool allow_to_use_two_level_group_by = pipeline.getNumStreams() > 1 && params.max_bytes_before_external_group_by != 0;
+    bool allow_to_use_two_level_group_by = pipeline.getNumStreams() > 1 || params.max_bytes_before_external_group_by != 0;
 
     /// optimize_aggregation_in_order
     if (!sort_description_for_merging.empty())
