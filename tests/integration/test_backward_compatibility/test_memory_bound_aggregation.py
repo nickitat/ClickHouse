@@ -50,7 +50,7 @@ def run_query_with_settings(node, query, user_settings={}):
 # node1.query(
 # """
 # select count()
-# from remote('node{1,2,3}', default, t)
+# from remote('node{1,2,3}', currentDatabase(), t)
 # group by a
 # limit 1 offset 12345
 # settings enable_memory_bound_merging_of_aggregation_results = 1, group_by_two_level_threshold = 1000, group_by_two_level_threshold_bytes = 1000
@@ -63,7 +63,7 @@ def run_query_with_settings(node, query, user_settings={}):
 # node2.query(
 # """
 # select count()
-# from remote('node{1,2,3}', default, t)
+# from remote('node{1,2,3}', currentDatabase(), t)
 # group by a
 # limit 1 offset 12345
 # settings enable_memory_bound_merging_of_aggregation_results = 1, group_by_two_level_threshold = 1000, group_by_two_level_threshold_bytes = 1000
@@ -93,7 +93,7 @@ def test_remote_node_sends_multiple_single_level_tables_from_ordinary_aggregatio
             node2,
             """
             select throwIf(count() != 11)
-            from remote('node{2,3}', default, t)
+            from remote('node{2,3}', currentDatabase(), t)
             group by a
             order by a
             format Null
@@ -120,7 +120,7 @@ def test_remote_node_sends_multiple_single_level_tables_from_aggregation_in_orde
             node2,
             """
             select throwIf(count() != 2)
-            from remote('node{2,3}', default, t)
+            from remote('node{2,3}', currentDatabase(), t)
             group by a
             order by a
             format Null
@@ -149,7 +149,7 @@ def test_old_initiator_and_new_remote_node(start_cluster):
             node1,
             """
             select throwIf(count() != 20)
-            from remote('node{1,2}', default, t)
+            from remote('node{1,2}', currentDatabase(), t)
             group by a
             format Null
         """,
@@ -173,7 +173,7 @@ def test_new_initiator_and_old_remote_node(start_cluster):
             node2,
             """
             select throwIf(count() != 20)
-            from remote('node{1,2}', default, t)
+            from remote('node{1,2}', currentDatabase(), t)
             group by a
             format Null
         """,

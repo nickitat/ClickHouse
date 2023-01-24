@@ -86,7 +86,7 @@ drop table dist_t_different_dbs;
 drop table shard_1.t_different_dbs;
 
 create table t2(a UInt64, b UInt64) engine=MergeTree order by a settings index_granularity = 1;
-system stop merges on t2;
+system stop merges t2;
 insert into t2 select number, rand() from numbers_mt(2);
 insert into t2 select number, rand() from numbers_mt(2);
 insert into t2 select number, rand() from numbers_mt(2);
