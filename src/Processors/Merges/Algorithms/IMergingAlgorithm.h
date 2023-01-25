@@ -15,6 +15,7 @@ public:
         bool is_finished = false;
         ssize_t required_source = -1;
 
+        Status() = default;
         explicit Status(Chunk chunk_) : chunk(std::move(chunk_)) {}
         explicit Status(Chunk chunk_, bool is_finished_) : chunk(std::move(chunk_)), is_finished(is_finished_) {}
         explicit Status(size_t source) : required_source(source) {}

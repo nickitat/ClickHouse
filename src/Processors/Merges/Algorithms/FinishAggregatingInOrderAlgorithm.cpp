@@ -63,6 +63,7 @@ void FinishAggregatingInOrderAlgorithm::initialize(Inputs inputs)
 {
     current_inputs = std::move(inputs);
     states.resize(num_inputs);
+    total_rows.assign(num_inputs, 0);
     for (size_t i = 0; i < num_inputs; ++i)
         consume(current_inputs[i], i);
 
@@ -104,6 +105,11 @@ void FinishAggregatingInOrderAlgorithm::consume(Input & input, size_t source_num
     // ++bucket_nums[bucket_num];
     current_bucket_num = std::min(current_bucket_num, bucket_num);
 
+    /* LOG_DEBUG( */
+    /* &Poco::Logger::get("debug"), */
+    /* "FinishAggregatingInOrderAlgorithm header:{}, chunk:{}", */
+    /* header.dumpStructure(), */
+    /* input.chunk.dumpStructure()); */
     Block block = header.cloneWithColumns(input.chunk.detachColumns());
     if (!sort_description.empty() && !is_bucket_sorted)
     {
@@ -112,7 +118,8 @@ void FinishAggregatingInOrderAlgorithm::consume(Input & input, size_t source_num
     }
     Chunk chunk(block.getColumns(), block.rows());
 
-    states[source_num] = State{chunk, description, allocated_bytes, bucket_num};
+    states[source_num] = State(chunk, description, allocated_bytes, bucket_num);
+    total_rows[source_num] += states[source_num].num_rows;
 
     /*std::string s;
     for (size_t i = 0; i < num_inputs; ++i)
@@ -124,6 +131,12 @@ void FinishAggregatingInOrderAlgorithm::consume(Input & input, size_t source_num
         s);*/
 }
 
+size_t FinishAggregatingInOrderAlgorithm::getRowToCompareWith(const FinishAggregatingInOrderAlgorithm::State & state) const
+{
+    const size_t max_block_size_per_input = std::max<size_t>(1, max_block_size / num_inputs);
+    return std::min<size_t>(state.current_row + max_block_size_per_input, state.num_rows - 1);
+}
+
 IMergingAlgorithm::Status FinishAggregatingInOrderAlgorithm::merge()
 {
     if (!inputs_to_update.empty())
@@ -133,31 +146,47 @@ IMergingAlgorithm::Status FinishAggregatingInOrderAlgorithm::merge()
         return status;
     }
 
-    /*if (!chunks.empty())
-        return Status(prepareToMerge());*/
+    /* if (!chunks.empty() && accumulated_rows >= max_block_size) */
+    /* return Status(prepareToMerge()); */
 
     /// Find the input with smallest last row.
     std::optional<size_t> best_input;
     for (size_t i = 0; i < num_inputs; ++i)
     {
-        if (!states[i].isValid(current_bucket_num))
+        if (!states[i].isValid(current_bucket_num) || states[i].bucket_num != current_bucket_num)
             continue;
 
         if (!best_input
-            || less(states[i].sorting_columns, states[*best_input].sorting_columns,
-                    states[i].num_rows - 1, states[*best_input].num_rows - 1, description))
+            || less(
+                states[i].sorting_columns,
+                states[*best_input].sorting_columns,
+                getRowToCompareWith(states[i]),
+                getRowToCompareWith(states[*best_input]),
+                description))
         {
             best_input = i;
         }
     }
 
-    // LOG_DEBUG(&Poco::Logger::get("debug"), "best_input={}", best_input.value_or(-1));
+    /* for (size_t i = 0; i < num_inputs; ++i) */
+    /* { */
+    /* LOG_DEBUG( */
+    /* &Poco::Logger::get("debug"), */
+    /* "input={}, bucket_num={}, current_row={}, num_rows={}, to_row={}, isValid={}", */
+    /* i, */
+    /* states[i].bucket_num, */
+    /* states[i].current_row, */
+    /* states[i].num_rows, */
+    /* states[i].to_row, */
+    /* states[i].isValid(current_bucket_num)); */
+    /* } */
+    /* LOG_DEBUG(&Poco::Logger::get("debug"), "best_input={}", best_input.value_or(-1)); */
+
     if (!best_input)
     {
-        Chunk chunk;
         if (!chunks.empty())
         {
-            chunk = prepareToMerge();
+            Chunk chunk = prepareToMerge();
             return Status(std::move(chunk), chunks.empty() && overflow_chunks.empty());
         }
         return Status(prepareToMerge(), true);
@@ -165,7 +194,7 @@ IMergingAlgorithm::Status FinishAggregatingInOrderAlgorithm::merge()
 
     /// Chunk at best_input will be aggregated entirely.
     auto & best_state = states[*best_input];
-    best_state.to_row = states[*best_input].num_rows;
+    best_state.to_row = getRowToCompareWith(states[*best_input]) + 1;
 
     /// Find the positions up to which need to aggregate in other chunks.
     for (size_t i = 0; i < num_inputs; ++i)
@@ -173,25 +202,29 @@ IMergingAlgorithm::Status FinishAggregatingInOrderAlgorithm::merge()
         if (!states[i].isValid(current_bucket_num) || i == *best_input)
             continue;
 
-        auto indices = collections::range(states[i].current_row, states[i].num_rows);
-        auto it = std::upper_bound(indices.begin(), indices.end(), best_state.num_rows - 1,
+        auto indices = collections::range(states[i].current_row, getRowToCompareWith(states[i]) + 1);
+        auto it = std::upper_bound(
+            indices.begin(),
+            indices.end(),
+            getRowToCompareWith(best_state),
             [&](size_t lhs_pos, size_t rhs_pos)
-            {
-                return less(best_state.sorting_columns, states[i].sorting_columns, lhs_pos, rhs_pos, description);
-            });
+            { return less(best_state.sorting_columns, states[i].sorting_columns, lhs_pos, rhs_pos, description); });
 
-        states[i].to_row = (it == indices.end() ? states[i].num_rows : *it);
+        states[i].to_row = (it == indices.end() ? getRowToCompareWith(states[i]) + 1 : *it);
     }
 
     addToAggregation();
 
     /// At least one chunk should be fully (todo: is it always a good idea?) aggregated.
-    assert(!inputs_to_update.empty());
-    Status status(inputs_to_update.back());
-    inputs_to_update.pop_back();
+    Status status;
+    if (!inputs_to_update.empty())
+    {
+        status.required_source = inputs_to_update.back();
+        inputs_to_update.pop_back();
+    }
 
     /// Do not merge blocks, if there are too few rows or bytes.
-    if (accumulated_rows >= max_block_size || accumulated_bytes >= max_block_bytes)
+    if (accumulated_rows >= max_block_size /*|| accumulated_bytes >= max_block_bytes*/)
         status.chunk = prepareToMerge();
 
     return status;
@@ -200,8 +233,11 @@ IMergingAlgorithm::Status FinishAggregatingInOrderAlgorithm::merge()
 Chunk FinishAggregatingInOrderAlgorithm::prepareToMerge()
 {
     /// todo: fixme
-    accumulated_rows = 0;
-    accumulated_bytes = 0;
+    /* accumulated_rows = 0; */
+    /* accumulated_bytes = 0; */
+
+    if (accumulated_rows > 1e5)
+        LOG_DEBUG(&Poco::Logger::get("debug"), "current_bucket_num={}, accumulated_rows={}", current_bucket_num, accumulated_rows);
 
     auto info = std::make_shared<ChunksToMerge>();
     if (!chunks.empty())
@@ -210,6 +246,9 @@ Chunk FinishAggregatingInOrderAlgorithm::prepareToMerge()
         size_t i = 0;
         while (i < chunks.size() && getInfoFromChunk(chunks[i])->bucket_num == bucket_num)
         {
+            /* LOG_DEBUG(&Poco::Logger::get("debug"), "input={}, current_bucket_num={}", i, chunks[i].dumpStructure()); */
+            accumulated_rows -= chunks[i].getNumRows();
+            accumulated_bytes -= chunks[i].bytes();
             ++i;
             /*--bucket_nums[bucket_num];
             if (bucket_nums[bucket_num] == 0)
@@ -247,19 +286,35 @@ Chunk FinishAggregatingInOrderAlgorithm::prepareToMerge()
 
 void FinishAggregatingInOrderAlgorithm::addToAggregation()
 {
+    size_t max_r = 0;
+
     for (size_t i = 0; i < num_inputs; ++i)
     {
         const auto & state = states[i];
-        if ((!state.isValid(current_bucket_num) && state.bucket_num == current_bucket_num) || state.current_row == state.to_row)
+        if (!state.isValid(current_bucket_num) || state.bucket_num != current_bucket_num || state.current_row == state.to_row)
             continue;
 
-        size_t current_rows = state.to_row - state.current_row;
+        /* LOG_DEBUG( */
+        /* &Poco::Logger::get("debug"), */
+        /* "input={}, current_bucket_num={}, bucket_num={}, current_row={}, num_rows={}, to_row={}, isValid={}", */
+        /* i, */
+        /* current_bucket_num, */
+        /* states[i].bucket_num, */
+        /* states[i].current_row, */
+        /* states[i].num_rows, */
+        /* states[i].to_row, */
+        /* states[i].isValid(current_bucket_num)); */
+
+        const size_t current_rows = state.to_row - state.current_row;
+        max_r += current_rows;
         if (current_rows == state.num_rows)
         {
+            /* LOG_DEBUG(&Poco::Logger::get("debug"), "columns={}", state.all_columns.size()); */
             chunks.emplace_back(state.all_columns, current_rows);
         }
         else
         {
+            /* LOG_DEBUG(&Poco::Logger::get("debug"), "columns={}", state.all_columns.size()); */
             Columns new_columns;
             new_columns.reserve(state.all_columns.size());
             for (const auto & column : state.all_columns)
@@ -276,15 +331,13 @@ void FinishAggregatingInOrderAlgorithm::addToAggregation()
         accumulated_bytes += static_cast<size_t>(static_cast<double>(states[i].total_bytes) * current_rows / states[i].num_rows);
         accumulated_rows += current_rows;
 
-        /*LOG_DEBUG(
-            &Poco::Logger::get("debug"),
-            "i={}, {}, {}",
-            i,
-            !states[i].isValid(current_bucket_num),
-            states[i].bucket_num <= current_bucket_num);*/
         if (!states[i].isValid(current_bucket_num) && states[i].bucket_num <= current_bucket_num)
             inputs_to_update.push_back(i);
     }
+
+    (void)max_r;
+    if (max_r >= 1e5)
+        LOG_DEBUG(&Poco::Logger::get("debug"), "current_bucket_num={}, max_r={}", current_bucket_num, max_r);
 
     ssize_t bucket_num = 1000000;
     for (size_t i = 0; i < num_inputs; ++i)

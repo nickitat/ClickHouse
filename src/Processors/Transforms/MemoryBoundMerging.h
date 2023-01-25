@@ -563,6 +563,8 @@ private:
     {
         const auto & header = inputs.front().getHeader();
 
+        LOG_DEBUG(&Poco::Logger::get("debug"), "create Processors {} {}", memory_bound_merging_enabled, some_input_has_sorted_chunk);
+
         if (!memory_bound_merging_enabled || !some_input_has_sorted_chunk)
         {
             Pipe pipe{std::make_shared<GroupingAggregatedTransform>(header, num_inputs, params)};
@@ -583,6 +585,8 @@ private:
         }
         else
         {
+            LOG_DEBUG(&Poco::Logger::get("debug"), "create Processors {} {}", params->params.max_block_size, max_block_bytes);
+
             Pipe pipe{std::make_shared<FinishAggregatingInOrderTransform>(
                 header, num_inputs, params, group_by_sort_description, params->params.max_block_size, max_block_bytes)};
 

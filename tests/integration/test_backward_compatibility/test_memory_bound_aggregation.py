@@ -95,7 +95,6 @@ def test_remote_node_sends_multiple_single_level_tables_from_ordinary_aggregatio
             select throwIf(count() != 11)
             from remote('node{2,3}', currentDatabase(), t)
             group by a
-            order by a
             format Null
         """,
         )

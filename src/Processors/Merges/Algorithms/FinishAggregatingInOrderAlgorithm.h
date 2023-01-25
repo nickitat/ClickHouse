@@ -90,6 +90,8 @@ private:
         bool isValid(ssize_t current_bucket) const { return current_row < num_rows && bucket_num <= current_bucket; }
     };
 
+    size_t getRowToCompareWith(const State & state) const;
+
     // std::map<ssize_t, ssize_t> bucket_nums;
     ssize_t current_bucket_num = 100000;
 
@@ -109,6 +111,7 @@ private:
     Inputs current_inputs;
 
     std::vector<State> states;
+    std::vector<size_t> total_rows;
     std::vector<size_t> inputs_to_update;
 
     std::vector<Chunk> chunks;
