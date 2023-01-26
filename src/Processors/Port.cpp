@@ -23,8 +23,7 @@ void connect(OutputPort & output, InputPort & input, bool reconnect)
 
     input.output_port = &output;
     output.input_port = &input;
-    if (!input.state)
-        input.state = std::make_shared<Port::State>();
+    input.state = std::make_shared<Port::State>();
     output.state = input.state;
 }
 

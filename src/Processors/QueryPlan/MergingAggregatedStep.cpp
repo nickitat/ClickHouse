@@ -113,8 +113,8 @@ void MergingAggregatedStep::transformPipeline(QueryPipelineBuilder & pipeline, c
 
         if (should_produce_results_in_order_of_bucket_number)
         {
-            pipeline.addTransform(std::make_shared<SortingAggregatedForMemoryBoundMergingTransform>(
-                pipeline.getHeader(), pipeline.getNumStreams(), required_sort_description));
+            pipeline.addTransform(
+                std::make_shared<SortingAggregatedForMemoryBoundMergingTransform>(pipeline.getHeader(), pipeline.getNumStreams()));
         }
 
         return;
@@ -135,15 +135,12 @@ void MergingAggregatedStep::transformPipeline(QueryPipelineBuilder & pipeline, c
                                  ? static_cast<size_t>(memory_efficient_merge_threads)
                                  : static_cast<size_t>(max_threads);
 
-        /// todo: replace with addMergingAggregatedMemoryEfficientTransform
-        pipeline.addTransform(std::make_shared<ChooseMergingAlgorithmTransform>(
-            pipeline.getHeader(),
-            pipeline.getNumStreams(),
+        pipeline.addMergingAggregatedMemoryEfficientTransform(
             transform_params,
             num_merge_threads,
             group_by_sort_description,
             memory_bound_merging_max_block_bytes,
-            memory_bound_merging_of_aggregation_results_enabled));
+            memory_bound_merging_of_aggregation_results_enabled);
     }
 
     pipeline.resize(should_produce_results_in_order_of_bucket_number ? 1 : max_threads);

@@ -2405,7 +2405,7 @@ static Aggregator::Params getAggregatorParams(
     const Settings & settings,
     size_t group_by_two_level_threshold,
     size_t group_by_two_level_threshold_bytes,
-    SortDescription sort_description)
+    const SortDescription & sort_description)
 {
     const auto stats_collecting_params = Aggregator::Params::StatsCollectingParams(
         query_ptr,
@@ -2484,10 +2484,12 @@ void InterpreterSelectQuery::executeAggregation(QueryPlan & query_plan, const Ac
     SortDescription group_by_sort_description;
     SortDescription sort_description_for_merging;
 
-    if (group_by_info && settings.optimize_aggregation_in_order && !query_analyzer->useGroupingSetKey())
+    const bool is_aggregation_in_order = (group_by_info && settings.optimize_aggregation_in_order);
+    if ((is_aggregation_in_order || settings.enable_memory_bound_merging_of_aggregation_results) && !query_analyzer->useGroupingSetKey())
     {
         group_by_sort_description = getSortDescriptionFromGroupBy(getSelectQuery());
-        sort_description_for_merging = group_by_info->sort_description_for_merging;
+        if (group_by_info)
+            sort_description_for_merging = group_by_info->sort_description_for_merging;
     }
     else
         group_by_info = nullptr;
@@ -2513,18 +2515,6 @@ void InterpreterSelectQuery::executeAggregation(QueryPlan & query_plan, const Ac
 
         sort_description_for_merging = group_by_info->sort_description_for_merging;
     }
-
-    if (((group_by_info && settings.optimize_aggregation_in_order) || settings.enable_memory_bound_merging_of_aggregation_results) && !query_analyzer->useGroupingSetKey())
-        group_by_sort_description = getSortDescriptionFromGroupBy(getSelectQuery());
-    else
-        group_by_info = nullptr;
-
-    LOG_DEBUG(
-        &Poco::Logger::get("debug"),
-        "executeAggregation {} {} {}",
-        !!group_by_info,
-        settings.optimize_aggregation_in_order,
-        group_by_sort_description.size());
 
     auto aggregator_params = getAggregatorParams(
         query_ptr,

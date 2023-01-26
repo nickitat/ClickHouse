@@ -14,30 +14,19 @@
 #include <DataTypes/DataTypeAggregateFunction.h>
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypeLowCardinality.h>
-#include <AggregateFunctions/AggregateFunctionArray.h>
-#include <AggregateFunctions/AggregateFunctionState.h>
 #include <Columns/ColumnArray.h>
-#include <Columns/ColumnSparse.h>
 #include <Columns/ColumnTuple.h>
-#include <Compression/CompressedWriteBuffer.h>
-#include <Core/ProtocolDefines.h>
-#include <DataTypes/DataTypeAggregateFunction.h>
-#include <DataTypes/DataTypeLowCardinality.h>
-#include <DataTypes/DataTypeNullable.h>
-#include <Disks/TemporaryFileOnDisk.h>
+#include <Columns/ColumnSparse.h>
 #include <Formats/NativeWriter.h>
-#include <IO/Operators.h>
 #include <IO/WriteBufferFromFile.h>
+#include <Compression/CompressedWriteBuffer.h>
 #include <Interpreters/Aggregator.h>
-#include <Interpreters/JIT/CompiledExpressionCache.h>
-#include <Interpreters/JIT/compileFunction.h>
-#include <base/sort.h>
 #include <Common/CacheBase.h>
-#include <Common/CurrentThread.h>
-#include <Common/JSONBuilder.h>
 #include <Common/MemoryTracker.h>
-#include <Common/Stopwatch.h>
+#include <Common/CurrentThread.h>
+#include <Common/typeid_cast.h>
 #include <Common/assert_cast.h>
+#include <Common/JSONBuilder.h>
 #include <Common/filesystemHelpers.h>
 #include <AggregateFunctions/AggregateFunctionArray.h>
 #include <AggregateFunctions/AggregateFunctionState.h>
@@ -48,10 +37,7 @@
 #include <Disks/TemporaryFileOnDisk.h>
 #include <Interpreters/TemporaryDataOnDisk.h>
 #include <Common/scope_guard_safe.h>
-#include <Common/formatReadable.h>
-#include <Common/setThreadName.h>
-#include <Common/typeid_cast.h>
-#include "Interpreters/sortBlock.h"
+#include <Interpreters/sortBlock.h>
 
 #include <Parsers/ASTSelectQuery.h>
 
@@ -2721,7 +2707,6 @@ ManyAggregatedDataVariants Aggregator::prepareVariantsToMerge(ManyAggregatedData
     /// Note - perhaps it would be more optimal not to convert single-level versions before the merge, but merge them separately, at the end.
 
     bool has_at_least_one_two_level = false;
-
     for (const auto & variant : non_empty_data)
     {
         if (variant->isTwoLevel())
@@ -3338,8 +3323,6 @@ void Aggregator::destroyAllAggregateStates(AggregatedDataVariants & result) cons
 {
     if (result.empty())
         return;
-
-    LOG_DEBUG(log, "destroyAllAggregateStates, result_size={}", result.size());
 
     /// In what data structure is the data aggregated?
     if (result.type == AggregatedDataVariants::Type::without_key || params.overflow_row)

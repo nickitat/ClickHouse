@@ -45,7 +45,7 @@ namespace detail
 class SortingAggregatedForMemoryBoundMergingTransform : public IProcessor
 {
 public:
-    explicit SortingAggregatedForMemoryBoundMergingTransform(const Block & header_, size_t num_inputs_, SortDescription)
+    explicit SortingAggregatedForMemoryBoundMergingTransform(const Block & header_, size_t num_inputs_)
         : IProcessor(InputPorts(num_inputs_, header_), {header_})
         , header(header_)
         , num_inputs(num_inputs_)
@@ -595,8 +595,7 @@ private:
             pipe.addSimpleTransform([&](const Block &)
                                     { return std::make_shared<MergingAggregatedBucketTransform>(params, group_by_sort_description); });
 
-            pipe.addTransform(std::make_shared<SortingAggregatedForMemoryBoundMergingTransform>(
-                pipe.getHeader(), pipe.numOutputPorts(), group_by_sort_description));
+            pipe.addTransform(std::make_shared<SortingAggregatedForMemoryBoundMergingTransform>(pipe.getHeader(), pipe.numOutputPorts()));
 
             processors = Pipe::detachProcessors(std::move(pipe));
         }

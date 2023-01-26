@@ -154,7 +154,9 @@ class Pipe;
 void addMergingAggregatedMemoryEfficientTransform(
     Pipe & pipe,
     AggregatingTransformParamsPtr params,
-    size_t num_merging_processors);
-
+    size_t num_merging_processors,
+    const SortDescription & sort_description,
+    size_t max_block_bytes,
+    bool memory_bound_merging_of_aggregation_results_enabled);
 }
 

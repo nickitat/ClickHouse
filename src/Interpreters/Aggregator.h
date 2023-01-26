@@ -962,7 +962,7 @@ public:
         StatsCollectingParams stats_collecting_params;
 
         /// Used for memory bound merging.
-        bool memory_bound_merging_enabled;
+        const bool memory_bound_merging_enabled = false;
         SortDescription sort_description;
 
         Params(
@@ -985,7 +985,7 @@ public:
             bool only_merge_, // true for projections
             const StatsCollectingParams & stats_collecting_params_ = {},
             bool memory_bound_merging_enabled_ = false,
-            SortDescription sort_description_ = {})
+            const SortDescription & sort_description_ = {})
             : keys(keys_)
             , aggregates(aggregates_)
             , keys_size(keys.size())
@@ -1074,7 +1074,7 @@ public:
 
     /** Split block with partially-aggregated data to many blocks, as if two-level method of aggregation was used.
       * This is needed to simplify merging of that data with other results, that are already two-level.
-      * Result size equal to number of buckets, blocks go in order of bucket number.
+      * Number of output blocks equals to number of buckets, blocks go in order of bucket number.
       */
     std::vector<Block> convertBlockToTwoLevel(const Block & block) const;
 

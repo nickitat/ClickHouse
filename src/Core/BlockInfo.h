@@ -36,7 +36,7 @@ struct BlockInfo
 #define APPLY_FOR_BLOCK_INFO_FIELDS(M) \
     M(bool,     is_overflows,       false,  1, 0) \
     M(Int32,    bucket_num,         -1,     2, 0) \
-    M(bool,     is_bucket_sorted,   false,  3, 54470)
+    M(bool,     is_bucket_sorted,   false,  3, 54467)
 
 #define DECLARE_FIELD(TYPE, NAME, DEFAULT, FIELD_NUM, MIN_SUPPORTED_REVISION) \
     TYPE NAME = DEFAULT;

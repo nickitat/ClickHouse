@@ -4,6 +4,7 @@
 #include <Processors/ISimpleTransform.h>
 #include <Processors/ResizeProcessor.h>
 #include <Processors/Transforms/AggregatingInOrderTransform.h>
+#include <Processors/Transforms/MemoryBoundMerging.h>
 #include <Processors/Transforms/MergingAggregatedMemoryEfficientTransform.h>
 #include <QueryPipeline/Pipe.h>
 
@@ -544,29 +545,19 @@ IProcessor::Status SortingAggregatedTransform::prepare()
 void addMergingAggregatedMemoryEfficientTransform(
     Pipe & pipe,
     AggregatingTransformParamsPtr params,
-    size_t num_merging_processors)
+    size_t num_merging_processors,
+    const SortDescription & sort_description,
+    size_t max_block_bytes,
+    bool memory_bound_merging_of_aggregation_results_enabled)
 {
-    pipe.addTransform(std::make_shared<GroupingAggregatedTransform>(pipe.getHeader(), pipe.numOutputPorts(), params));
-
-    if (num_merging_processors <= 1)
-    {
-        /// --> GroupingAggregated --> MergingAggregatedBucket -->
-        pipe.addTransform(std::make_shared<MergingAggregatedBucketTransform>(params));
-        return;
-    }
-
-    /// -->                                        --> MergingAggregatedBucket -->
-    /// --> GroupingAggregated --> ResizeProcessor --> MergingAggregatedBucket --> SortingAggregated -->
-    /// -->                                        --> MergingAggregatedBucket -->
-
-    pipe.resize(num_merging_processors);
-
-    pipe.addSimpleTransform([params](const Block &)
-    {
-        return std::make_shared<MergingAggregatedBucketTransform>(params);
-    });
-
-    pipe.addTransform(std::make_shared<SortingAggregatedTransform>(num_merging_processors, params));
+    pipe.addTransform(std::make_shared<ChooseMergingAlgorithmTransform>(
+        pipe.getHeader(),
+        pipe.numOutputPorts(),
+        params,
+        num_merging_processors,
+        sort_description,
+        max_block_bytes,
+        memory_bound_merging_of_aggregation_results_enabled));
 }
 
 }

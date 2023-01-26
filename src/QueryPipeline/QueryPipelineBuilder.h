@@ -33,6 +33,8 @@ class TableJoin;
 class QueryPipelineBuilder;
 using QueryPipelineBuilderPtr = std::unique_ptr<QueryPipelineBuilder>;
 
+class SortDescription;
+
 class QueryPipelineBuilder
 {
 public:
@@ -88,7 +90,12 @@ public:
     /// Will read from this stream after all data was read from other streams.
     void addDelayedStream(ProcessorPtr source);
 
-    void addMergingAggregatedMemoryEfficientTransform(AggregatingTransformParamsPtr params, size_t num_merging_processors);
+    void addMergingAggregatedMemoryEfficientTransform(
+        AggregatingTransformParamsPtr params,
+        size_t num_merging_processors,
+        const SortDescription & sort_description,
+        size_t max_block_bytes,
+        bool memory_bound_merging_of_aggregation_results_enabled);
 
     /// Changes the number of output ports if needed. Adds ResizeTransform.
     void resize(size_t num_streams, bool force = false, bool strict = false);

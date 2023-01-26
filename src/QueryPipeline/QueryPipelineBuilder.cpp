@@ -187,9 +187,20 @@ void QueryPipelineBuilder::addDelayedStream(ProcessorPtr source)
     addTransform(std::move(processor));
 }
 
-void QueryPipelineBuilder::addMergingAggregatedMemoryEfficientTransform(AggregatingTransformParamsPtr params, size_t num_merging_processors)
+void QueryPipelineBuilder::addMergingAggregatedMemoryEfficientTransform(
+    AggregatingTransformParamsPtr params,
+    size_t num_merging_processors,
+    const SortDescription & sort_description,
+    size_t max_block_bytes,
+    bool memory_bound_merging_of_aggregation_results_enabled)
 {
-    DB::addMergingAggregatedMemoryEfficientTransform(pipe, std::move(params), num_merging_processors);
+    DB::addMergingAggregatedMemoryEfficientTransform(
+        pipe,
+        std::move(params),
+        num_merging_processors,
+        sort_description,
+        max_block_bytes,
+        memory_bound_merging_of_aggregation_results_enabled);
 }
 
 void QueryPipelineBuilder::resize(size_t num_streams, bool force, bool strict)
