@@ -265,6 +265,14 @@ public:
 
     void work() override { }
 
+    void closeAllPorts()
+    {
+        for (auto & in : inputs)
+            in.close();
+        for (auto & out : outputs)
+            out.finish();
+    }
+
     IProcessor::Status prepare() override
     {
         /// Read first time from each input to understand what kinds of buckets do we have.
@@ -312,20 +320,12 @@ public:
         }
         else if (merged_output.isFinished())
         {
-            for (auto & in : inputs)
-                in.close();
-            for (auto & out : outputs)
-                out.finish();
-            LOG_DEBUG(&Poco::Logger::get("debug"), "ChooseMergingAlgorithmTransform {}", __LINE__);
+            closeAllPorts();
             return Status::Finished;
         }
         if (merged_input.isFinished())
         {
-            for (auto & in : inputs)
-                in.close();
-            for (auto & out : outputs)
-                out.finish();
-            LOG_DEBUG(&Poco::Logger::get("debug"), "ChooseMergingAlgorithmTransform {}", __LINE__);
+            closeAllPorts();
             return Status::Finished;
         }
 
@@ -382,7 +382,7 @@ public:
                 continue;
             }
 
-            if (!read_chunks[i].empty())
+            if (read_chunks[i])
             {
                 out->push(std::move(read_chunks[i]));
                 read_chunks[i] = Chunk{};
@@ -422,7 +422,7 @@ public:
             //    throw Exception(ErrorCodes::LOGICAL_ERROR, "single level chunks are not expected on this stage");
             processChunk(std::move(chunk), i);
 
-            if (out->canPush() && !read_chunks[i].empty())
+            if (out->canPush() && read_chunks[i])
             {
                 out->push(std::move(read_chunks[i]));
                 read_chunks[i] = Chunk{};
@@ -442,14 +442,7 @@ public:
         bool b = std::all_of(converted_chunks.begin(), converted_chunks.end(), [](const auto & chunks) { return chunks.empty(); });
         if (all_finished && (merged_input.isFinished() || merged_output.isFinished()) && a && b)
         {
-            /* auto outp = std::next(outputs.begin()); */
-            /* for (; outp != outputs.end(); ++outp) */
-            /* outp->finish(); */
-            for (auto & i : inputs)
-                i.close();
-            for (auto & o : outputs)
-                o.finish();
-            LOG_DEBUG(&Poco::Logger::get("debug"), "ChooseMergingAlgorithmTransform {}", __LINE__);
+            closeAllPorts();
             return Status::Finished;
         }
 
