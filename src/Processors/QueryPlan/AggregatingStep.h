@@ -67,7 +67,7 @@ private:
     GroupingSetsParamsList grouping_sets_params;
     bool final;
     size_t max_block_size;
-    size_t aggregation_in_order_max_block_bytes;
+    size_t max_block_bytes;
     size_t merge_threads;
     size_t temporary_data_merge_threads;
 

@@ -371,7 +371,6 @@ QueryPlanPtr MergeTreeDataSelectExecutor::read(
                             counter++,
                             merge_threads,
                             temporary_data_merge_threads,
-                            settings.enable_memory_bound_merging_of_aggregation_results,
                             settings.aggregation_in_order_max_block_bytes);
                     });
             };

@@ -24,8 +24,11 @@ public:
 
     bool is_overflows = false;
     Int32 bucket_num = -1;
-    bool is_bucket_sorted = false; // it will be sorted during writing on disk if memory bound merging is enabled
-    UInt64 chunk_num = 0; // chunk number in order of generation, used during memory bound merging to restore chunks order
+    /// It might be sorted during writing on disk if memory bound merging is enabled
+    bool is_bucket_sorted = false;
+    /// Chunk number in order of generation, used during memory bound merging to restore chunks order after parallel merging (see SortingAggregatedForMemoryBoundMergingTransform).
+    /// The initiator in distributed aggregation doesn't care about this ordering.
+    UInt64 chunk_num = 0;
 };
 
 using AggregatorList = std::list<Aggregator>;
@@ -91,11 +94,6 @@ struct ManyAggregatedData
             if (variants.size() <= 1)
                 return;
 
-            std::string sizes;
-            for (auto & variant : variants)
-                sizes += fmt::format("{}, ", variant->size());
-            LOG_DEBUG(&Poco::Logger::get("debug"), "variants.size()={}, sizes={}", variants.size(), sizes);
-
             // Aggregation states destruction may be very time-consuming.
             // In the case of a query with LIMIT, most states won't be destroyed during conversion to blocks.
             // Without the following code, they would be destroyed in the destructor of AggregatedDataVariants in the current thread (i.e. sequentially).
@@ -155,7 +153,7 @@ using ManyAggregatedDataPtr = std::shared_ptr<ManyAggregatedData>;
 class AggregatingTransform : public IProcessor
 {
 public:
-    AggregatingTransform(Block header, AggregatingTransformParamsPtr params_, bool memory_bound_merging_enabled_, size_t max_block_bytes_);
+    AggregatingTransform(Block header, AggregatingTransformParamsPtr params_, size_t max_block_bytes_);
 
     /// For Parallel aggregating.
     AggregatingTransform(
@@ -165,7 +163,6 @@ public:
         size_t current_variant,
         size_t max_threads,
         size_t temporary_data_merge_threads,
-        bool memory_bound_merging_enabled_,
         size_t max_block_bytes_);
 
     ~AggregatingTransform() override;
@@ -199,7 +196,6 @@ private:
     AggregatedDataVariants & variants;
     size_t max_threads = 1;
     size_t temporary_data_merge_threads = 1;
-    bool memory_bound_merging_enabled;
     size_t max_block_bytes;
 
     /// TODO: calculate time only for aggregation.

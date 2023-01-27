@@ -21,9 +21,9 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-static void checkSource(const IProcessor & source)
+static void checkSource(const IProcessor & source, bool allow_have_inputs = false)
 {
-    if (!source.getInputs().empty())
+    if (!allow_have_inputs && !source.getInputs().empty())
         throw Exception(
             ErrorCodes::LOGICAL_ERROR,
             "Source for pipe shouldn't have any input, but {} has {} inputs",
@@ -162,16 +162,12 @@ Pipe::Pipe(ProcessorPtr source, OutputPort * output, OutputPort * totals, Output
     max_parallel_streams = 1;
 }
 
-Pipe::Pipe(ProcessorPtr source)
-    : processors(std::make_shared<Processors>())
+Pipe::Pipe(ProcessorPtr source, bool allow_have_inputs) : processors(std::make_shared<Processors>())
 {
-    // checkSource(*source);
+    checkSource(*source, allow_have_inputs);
 
     if (collected_processors)
         collected_processors->emplace_back(source);
-
-    if (source->getOutputs().size() != 1)
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "");
 
     output_ports.push_back(&source->getOutputs().front());
     header = output_ports.front()->getHeader();

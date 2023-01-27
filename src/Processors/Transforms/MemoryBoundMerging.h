@@ -567,7 +567,7 @@ private:
 
         if (!memory_bound_merging_enabled || !some_input_has_sorted_chunk)
         {
-            Pipe pipe{std::make_shared<GroupingAggregatedTransform>(header, num_inputs, params)};
+            Pipe pipe{std::make_shared<GroupingAggregatedTransform>(header, num_inputs, params), true /* allow_have_inputs */};
 
             if (num_inputs <= 1)
             {
@@ -587,13 +587,16 @@ private:
         {
             LOG_DEBUG(&Poco::Logger::get("debug"), "create Processors {} {}", params->params.max_block_size, max_block_bytes);
 
-            Pipe pipe{std::make_shared<FinishAggregatingInOrderTransform>(
-                header, num_inputs, params, group_by_sort_description, params->params.max_block_size, max_block_bytes)};
+            auto finish_aggregating = std::make_shared<FinishAggregatingInOrderTransform>(
+                header, num_inputs, params, group_by_sort_description, params->params.max_block_size, max_block_bytes);
+            Pipe pipe{std::move(finish_aggregating), true /* allow_have_inputs */};
 
             pipe.resize(temporary_data_merge_threads);
 
+            const auto & required_sort_description = !params->final ? group_by_sort_description : SortDescription{};
+
             pipe.addSimpleTransform([&](const Block &)
-                                    { return std::make_shared<MergingAggregatedBucketTransform>(params, group_by_sort_description); });
+                                    { return std::make_shared<MergingAggregatedBucketTransform>(params, required_sort_description); });
 
             pipe.addTransform(std::make_shared<SortingAggregatedForMemoryBoundMergingTransform>(pipe.getHeader(), pipe.numOutputPorts()));
 
@@ -606,27 +609,24 @@ private:
     Processors expandPipeline() override
     {
         if (processors.empty())
-            throw Exception("Can not expandPipeline in ChooseMergingAlgorithmTransform. This is a bug.", ErrorCodes::LOGICAL_ERROR);
+            throw Exception("No processors prepared for expandPipeline()", ErrorCodes::LOGICAL_ERROR);
 
         const auto & header = inputs.front().getHeader();
 
-        /// Connect merging output with our output.
+        /// Connect merging output with our output
         if (outputs.size() != 1 || processors.back()->getOutputs().size() != 1)
-            throw Exception(ErrorCodes::LOGICAL_ERROR, "oops");
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "Single output port is expected");
 
-        // LOG_DEBUG(&Poco::Logger::get("debug"), "merging output directed to {}", static_cast<const void *>(&outputs.front().getInputPort()));
-
-        /// We create new input in the current transform;
+        /// We create new input in the current transform
         inputs.emplace_back(params->getHeader(), this);
         connect(processors.back()->getOutputs().front(), inputs.back(), true);
 
-        /// Connect our outputs with merging inputs.
+        /// Connect our outputs with merging inputs
         auto & merging_inputs = processors.front()->getInputs();
 
         if (merging_inputs.size() != num_inputs)
-            throw Exception(ErrorCodes::LOGICAL_ERROR, "oops");
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "Number of inputs don't match");
 
-        // outputs.clear();
         for (auto & in : merging_inputs)
         {
             outputs.emplace_back(header, this);

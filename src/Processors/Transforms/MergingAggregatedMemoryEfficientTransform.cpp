@@ -143,8 +143,6 @@ IProcessor::Status GroupingAggregatedTransform::prepare()
             return Status::NeedData;
     }
 
-    // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform read_from_all_inputs");
-
     /// Convert single level to two levels if have two-level input.
     if (has_two_level && !single_level_chunks.empty())
         return Status::Ready;
@@ -153,10 +151,7 @@ IProcessor::Status GroupingAggregatedTransform::prepare()
     if (!output.canPush())
     {
         for (auto & input : inputs)
-        {
-            // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform input {} setNotNeeded()", i);
             input.setNotNeeded();
-        }
 
         return Status::PortFull;
     }
@@ -184,29 +179,18 @@ IProcessor::Status GroupingAggregatedTransform::prepare()
         auto in = inputs.begin();
         for (size_t input_num = 0; input_num < num_inputs; ++input_num, ++in)
         {
-            // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform input {}", input_num);
-
             if (in->isFinished())
                 continue;
 
             finished = false;
 
             if (!need_input(input_num))
-            {
-                /*LOG_DEBUG(
-                    &Poco::Logger::get("debug"),
-                    "GroupingAggregatedTransform !need_input last_bucket_number {} current_bucket_num {}",
-                    last_bucket_number[input_num],
-                    current_bucket);*/
                 continue;
-            }
 
             in->setNeeded();
-            // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform setNeeded() input_num {}", input_num);
 
             if (!in->hasData())
             {
-                // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform !in->hasData()");
                 need_data = true;
                 continue;
             }
@@ -218,10 +202,7 @@ IProcessor::Status GroupingAggregatedTransform::prepare()
                 return Status::Ready;
 
             if (!in->isFinished() && need_input(input_num))
-            {
-                // LOG_DEBUG(&Poco::Logger::get("debug"), "GroupingAggregatedTransform !in->isFinished() && need_input(input_num)");
                 need_data = true;
-            }
         }
 
         if (finished)
@@ -268,9 +249,6 @@ IProcessor::Status GroupingAggregatedTransform::prepare()
 
 void GroupingAggregatedTransform::addChunk(Chunk chunk, size_t input)
 {
-    if (!chunk.hasChunkInfo())
-        return;
-
     const auto & info = chunk.getChunkInfo();
     if (!info)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Chunk info was not set for chunk in GroupingAggregatedTransform.");

@@ -29,8 +29,8 @@ public:
     /// Default constructor creates empty pipe. Generally, you cannot do anything with it except to check it is empty().
     /// You cannot get empty pipe in any other way. All transforms check that result pipe is not empty.
     Pipe();
-    /// Create from source. Source must have no input ports and single output.
-    explicit Pipe(ProcessorPtr source);
+    /// Create from source. Source must have single output.
+    explicit Pipe(ProcessorPtr source, bool allow_have_inputs = false);
     /// Create from source with specified totals end extremes (may be nullptr). Ports should be owned by source.
     explicit Pipe(ProcessorPtr source, OutputPort * output, OutputPort * totals, OutputPort * extremes);
     /// Create from processors. Use all not-connected output ports as output_ports. Check invariants.
