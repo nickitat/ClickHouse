@@ -418,6 +418,7 @@ IProcessor::Status AggregatingTransform::prepare()
     /// Check can output.
     if (output.isFinished())
     {
+        LOG_DEBUG(log, "AggregatingTransform {}", __LINE__);
         input.close();
         return Status::Finished;
     }
@@ -431,6 +432,7 @@ IProcessor::Status AggregatingTransform::prepare()
     /// Finish data processing, prepare to generating.
     if (is_consume_finished && !is_generate_initialized)
     {
+        LOG_DEBUG(log, "AggregatingTransform {}", __LINE__);
         /// Close input port in case max_rows_to_group_by was reached but not all data was read.
         inputs.front().close();
 
@@ -449,11 +451,13 @@ IProcessor::Status AggregatingTransform::prepare()
     {
         if (is_consume_finished)
         {
+            LOG_DEBUG(log, "AggregatingTransform {}", __LINE__);
             output.finish();
             return Status::Finished;
         }
         else
         {
+            LOG_DEBUG(log, "AggregatingTransform {}", __LINE__);
             /// Finish data processing and create another pipe.
             is_consume_finished = true;
             return Status::Ready;
@@ -462,6 +466,7 @@ IProcessor::Status AggregatingTransform::prepare()
 
     if (!input.hasData())
     {
+        LOG_DEBUG(log, "AggregatingTransform {} {}", __LINE__, is_consume_finished);
         input.setNeeded();
         return Status::NeedData;
     }
@@ -469,6 +474,7 @@ IProcessor::Status AggregatingTransform::prepare()
     if (is_consume_finished)
         input.setNeeded();
 
+    LOG_DEBUG(log, "AggregatingTransform {} {}", __LINE__, is_consume_finished);
     current_chunk = input.pull(/*set_not_needed = */ !is_consume_finished);
     read_current_chunk = true;
 

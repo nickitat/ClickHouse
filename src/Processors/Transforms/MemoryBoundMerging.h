@@ -291,6 +291,9 @@ public:
         if (outputs.size() != num_inputs + 1)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "No output ports created");
 
+        bool need_data = false;
+        bool pushed_something = false;
+
         auto & merged_input = inputs.back();
         auto & merged_output = outputs.front();
         if (merged_output.canPush())
@@ -299,26 +302,38 @@ public:
             {
                 auto chunk = merged_input.pull();
                 merged_output.push(std::move(chunk));
+                pushed_something = true;
             }
             else
             {
                 merged_input.setNeeded();
+                need_data = true;
             }
         }
         else if (merged_output.isFinished())
         {
-            merged_input.close();
+            for (auto & in : inputs)
+                in.close();
+            for (auto & out : outputs)
+                out.finish();
+            LOG_DEBUG(&Poco::Logger::get("debug"), "ChooseMergingAlgorithmTransform {}", __LINE__);
+            return Status::Finished;
         }
         if (merged_input.isFinished())
-            merged_output.finish();
+        {
+            for (auto & in : inputs)
+                in.close();
+            for (auto & out : outputs)
+                out.finish();
+            LOG_DEBUG(&Poco::Logger::get("debug"), "ChooseMergingAlgorithmTransform {}", __LINE__);
+            return Status::Finished;
+        }
 
         /// Output ports (i.e. actual merging transforms) were already created. Here we just forward input chunks to them.
         auto in = inputs.begin();
         auto out = std::next(outputs.begin());
 
-        bool need_data = false;
         bool all_finished = true;
-        bool pushed_something = false;
 
         bool all_single_level_finished = true;
 
@@ -407,7 +422,7 @@ public:
             //    throw Exception(ErrorCodes::LOGICAL_ERROR, "single level chunks are not expected on this stage");
             processChunk(std::move(chunk), i);
 
-            if (out->canPush() && read_chunks[i])
+            if (out->canPush() && !read_chunks[i].empty())
             {
                 out->push(std::move(read_chunks[i]));
                 read_chunks[i] = Chunk{};
@@ -425,11 +440,16 @@ public:
 
         bool a = std::all_of(read_chunks.begin(), read_chunks.end(), [](const auto & chunk) { return !chunk; });
         bool b = std::all_of(converted_chunks.begin(), converted_chunks.end(), [](const auto & chunks) { return chunks.empty(); });
-        if (all_finished && merged_input.isFinished() && a && b)
+        if (all_finished && (merged_input.isFinished() || merged_output.isFinished()) && a && b)
         {
-            auto outp = std::next(outputs.begin());
-            for (; outp != outputs.end(); ++outp)
-                outp->finish();
+            /* auto outp = std::next(outputs.begin()); */
+            /* for (; outp != outputs.end(); ++outp) */
+            /* outp->finish(); */
+            for (auto & i : inputs)
+                i.close();
+            for (auto & o : outputs)
+                o.finish();
+            LOG_DEBUG(&Poco::Logger::get("debug"), "ChooseMergingAlgorithmTransform {}", __LINE__);
             return Status::Finished;
         }
 
@@ -563,8 +583,6 @@ private:
     {
         const auto & header = inputs.front().getHeader();
 
-        LOG_DEBUG(&Poco::Logger::get("debug"), "create Processors {} {}", memory_bound_merging_enabled, some_input_has_sorted_chunk);
-
         if (!memory_bound_merging_enabled || !some_input_has_sorted_chunk)
         {
             Pipe pipe{std::make_shared<GroupingAggregatedTransform>(header, num_inputs, params), true /* allow_have_inputs */};
@@ -585,8 +603,6 @@ private:
         }
         else
         {
-            LOG_DEBUG(&Poco::Logger::get("debug"), "create Processors {} {}", params->params.max_block_size, max_block_bytes);
-
             auto finish_aggregating = std::make_shared<FinishAggregatingInOrderTransform>(
                 header, num_inputs, params, group_by_sort_description, params->params.max_block_size, max_block_bytes);
             Pipe pipe{std::move(finish_aggregating), true /* allow_have_inputs */};
