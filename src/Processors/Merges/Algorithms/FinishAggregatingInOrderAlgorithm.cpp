@@ -7,14 +7,10 @@
 
 #include <base/range.h>
 
-namespace DB
-{
+using namespace DB;
 
-namespace ErrorCodes
+namespace
 {
-    extern const int LOGICAL_ERROR;
-}
-
 
 const AggregatedChunkInfo * getInfoFromChunk(const Chunk & chunk)
 {
@@ -29,8 +25,19 @@ const AggregatedChunkInfo * getInfoFromChunk(const Chunk & chunk)
     return agg_info;
 }
 
+}
+
+
+namespace DB
+{
+
+namespace ErrorCodes
+{
+    extern const int LOGICAL_ERROR;
+}
+
 FinishAggregatingInOrderAlgorithm::State::State(
-    const Chunk & chunk, const SortDescriptionWithPositions & desc, Int64 total_bytes_, ssize_t bucket_num_)
+    const Chunk & chunk, const SortDescriptionWithPositions & desc, Int64 total_bytes_, Int32 bucket_num_)
     : all_columns(chunk.getColumns()), num_rows(chunk.getNumRows()), total_bytes(total_bytes_), bucket_num(bucket_num_)
 {
     if (!chunk)
@@ -63,14 +70,8 @@ void FinishAggregatingInOrderAlgorithm::initialize(Inputs inputs)
 {
     current_inputs = std::move(inputs);
     states.resize(num_inputs);
-    total_rows.assign(num_inputs, 0);
     for (size_t i = 0; i < num_inputs; ++i)
         consume(current_inputs[i], i);
-
-    /*std::string s;
-    for (size_t i = 0; i < num_inputs; ++i)
-        s += std::to_string(states[i].bucket_num) + ", ";
-    LOG_DEBUG(&Poco::Logger::get("debug"), "states={}", s);*/
 }
 
 void FinishAggregatingInOrderAlgorithm::consume(Input & input, size_t source_num)
@@ -82,15 +83,18 @@ void FinishAggregatingInOrderAlgorithm::consume(Input & input, size_t source_num
     if (!info)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Chunk info was not set for chunk in FinishAggregatingInOrderAlgorithm");
 
+    Int32 bucket_num = -1;
+    bool is_bucket_sorted = false;
     Int64 allocated_bytes = 0;
+
     /// Will be set by AggregatingInOrderTransform during local aggregation; will be nullptr during merging on initiator.
     if (const auto * arenas_info = typeid_cast<const ChunkInfoWithAllocatedBytes *>(info.get()))
-        allocated_bytes = arenas_info->allocated_bytes;
-
-    ssize_t bucket_num = -1;
-    bool is_bucket_sorted = false;
-    if (const auto * chunk_info = typeid_cast<const AggregatedChunkInfo *>(info.get()))
     {
+        allocated_bytes = arenas_info->allocated_bytes;
+    }
+    else
+    {
+        const auto * chunk_info = getInfoFromChunk(input.chunk);
         if (chunk_info->is_overflows)
         {
             overflow_chunks.emplace_back(std::move(input.chunk));
@@ -119,7 +123,6 @@ void FinishAggregatingInOrderAlgorithm::consume(Input & input, size_t source_num
     Chunk chunk(block.getColumns(), block.rows());
 
     states[source_num] = State(chunk, description, allocated_bytes, bucket_num);
-    total_rows[source_num] += states[source_num].num_rows;
 
     /*std::string s;
     for (size_t i = 0; i < num_inputs; ++i)
@@ -339,7 +342,7 @@ void FinishAggregatingInOrderAlgorithm::addToAggregation()
     if (max_r >= 1e5)
         LOG_DEBUG(&Poco::Logger::get("debug"), "current_bucket_num={}, max_r={}", current_bucket_num, max_r);
 
-    ssize_t bucket_num = 1000000;
+    Int32 bucket_num = 1000000;
     for (size_t i = 0; i < num_inputs; ++i)
     {
         const auto & state = states[i];

@@ -82,9 +82,9 @@ private:
         /// Number of bytes in all columns + number of bytes in arena, related to current chunk.
         size_t total_bytes = 0;
 
-        ssize_t bucket_num = -2;
+        Int32 bucket_num = -2;
 
-        State(const Chunk & chunk, const SortDescriptionWithPositions & description, Int64 total_bytes_, ssize_t bucket_num_);
+        State(const Chunk & chunk, const SortDescriptionWithPositions & description, Int64 total_bytes_, Int32 bucket_num_);
         State() = default;
 
         bool isValid(ssize_t current_bucket) const { return current_row < num_rows && bucket_num <= current_bucket; }
@@ -93,7 +93,7 @@ private:
     size_t getRowToCompareWith(const State & state) const;
 
     // std::map<ssize_t, ssize_t> bucket_nums;
-    ssize_t current_bucket_num = 100000;
+    Int32 current_bucket_num = 100000;
 
     Block header;
     size_t num_inputs;
@@ -111,7 +111,6 @@ private:
     Inputs current_inputs;
 
     std::vector<State> states;
-    std::vector<size_t> total_rows;
     std::vector<size_t> inputs_to_update;
 
     std::vector<Chunk> chunks;
