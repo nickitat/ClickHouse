@@ -1,3 +1,4 @@
+#include <limits>
 #include <Core/SortCursor.h>
 #include <Interpreters/sortBlock.h>
 #include <Processors/Merges/Algorithms/FinishAggregatingInOrderAlgorithm.h>
@@ -26,7 +27,6 @@ const AggregatedChunkInfo * getInfoFromChunk(const Chunk & chunk)
 }
 
 }
-
 
 namespace DB
 {
@@ -83,9 +83,9 @@ void FinishAggregatingInOrderAlgorithm::consume(Input & input, size_t source_num
     if (!info)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Chunk info was not set for chunk in FinishAggregatingInOrderAlgorithm");
 
+    Int64 allocated_bytes = 0;
     Int32 bucket_num = -1;
     bool is_bucket_sorted = false;
-    Int64 allocated_bytes = 0;
 
     /// Will be set by AggregatingInOrderTransform during local aggregation; will be nullptr during merging on initiator.
     if (const auto * arenas_info = typeid_cast<const ChunkInfoWithAllocatedBytes *>(info.get()))
@@ -289,35 +289,19 @@ Chunk FinishAggregatingInOrderAlgorithm::prepareToMerge()
 
 void FinishAggregatingInOrderAlgorithm::addToAggregation()
 {
-    size_t max_r = 0;
-
     for (size_t i = 0; i < num_inputs; ++i)
     {
         const auto & state = states[i];
-        if (!state.isValid(current_bucket_num) || state.bucket_num != current_bucket_num || state.current_row == state.to_row)
+        if (!state.isValid(current_bucket_num))
             continue;
 
-        /* LOG_DEBUG( */
-        /* &Poco::Logger::get("debug"), */
-        /* "input={}, current_bucket_num={}, bucket_num={}, current_row={}, num_rows={}, to_row={}, isValid={}", */
-        /* i, */
-        /* current_bucket_num, */
-        /* states[i].bucket_num, */
-        /* states[i].current_row, */
-        /* states[i].num_rows, */
-        /* states[i].to_row, */
-        /* states[i].isValid(current_bucket_num)); */
-
         const size_t current_rows = state.to_row - state.current_row;
-        max_r += current_rows;
         if (current_rows == state.num_rows)
         {
-            /* LOG_DEBUG(&Poco::Logger::get("debug"), "columns={}", state.all_columns.size()); */
             chunks.emplace_back(state.all_columns, current_rows);
         }
         else
         {
-            /* LOG_DEBUG(&Poco::Logger::get("debug"), "columns={}", state.all_columns.size()); */
             Columns new_columns;
             new_columns.reserve(state.all_columns.size());
             for (const auto & column : state.all_columns)
@@ -338,19 +322,14 @@ void FinishAggregatingInOrderAlgorithm::addToAggregation()
             inputs_to_update.push_back(i);
     }
 
-    (void)max_r;
-    if (max_r >= 1e5)
-        LOG_DEBUG(&Poco::Logger::get("debug"), "current_bucket_num={}, max_r={}", current_bucket_num, max_r);
-
-    Int32 bucket_num = 1000000;
+    /// Let's update current_bucket_num
+    current_bucket_num = std::numeric_limits<Int32>::max();
     for (size_t i = 0; i < num_inputs; ++i)
     {
         const auto & state = states[i];
-        if (state.current_row >= state.num_rows)
-            continue;
-        bucket_num = std::min(bucket_num, state.bucket_num);
+        if (state.current_row < state.num_rows)
+            current_bucket_num = std::min(current_bucket_num, state.bucket_num);
     }
-    current_bucket_num = bucket_num;
 }
 
 }

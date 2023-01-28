@@ -1,5 +1,6 @@
 #pragma once
 
+#include <limits>
 #include <Core/Block.h>
 #include <Core/SortDescription.h>
 #include <Processors/Merges/Algorithms/IMergingAlgorithm.h>
@@ -87,13 +88,12 @@ private:
         State(const Chunk & chunk, const SortDescriptionWithPositions & description, Int64 total_bytes_, Int32 bucket_num_);
         State() = default;
 
-        bool isValid(ssize_t current_bucket) const { return current_row < num_rows && bucket_num <= current_bucket; }
+        bool isValid(Int32 current_bucket) const { return current_row < num_rows && bucket_num == current_bucket; }
     };
 
     size_t getRowToCompareWith(const State & state) const;
 
-    // std::map<ssize_t, ssize_t> bucket_nums;
-    Int32 current_bucket_num = 100000;
+    Int32 current_bucket_num = std::numeric_limits<Int32>::max();
 
     Block header;
     size_t num_inputs;
