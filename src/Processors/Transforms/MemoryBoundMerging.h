@@ -28,13 +28,9 @@ namespace detail
     {
         const auto & info = chunk.getChunkInfo();
         if (!info)
-            throw Exception("Chunk info was not set for chunk.", ErrorCodes::LOGICAL_ERROR);
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "Chunk info was not set for chunk.");
 
-        const auto * agg_info = typeid_cast<const AggregatedChunkInfo *>(info.get());
-        if (!agg_info)
-            throw Exception("Chunk should have AggregatedChunkInfo.", ErrorCodes::LOGICAL_ERROR);
-
-        return agg_info;
+        return typeid_cast<const AggregatedChunkInfo *>(info.get());
     }
 }
 
@@ -481,26 +477,32 @@ private:
         if (!chunk.hasRows())
             return;
 
-        const auto * info = detail::getInfoFromChunk(chunk);
-        const auto bucket_num = info->bucket_num;
+        /// It might be also a chunk with ChunkInfoWithAllocatedBytes chunk info from aggregation in order.
+        Int32 bucket_num = -1;
+        bool is_overflows = false;
 
-        /// todo: think once again about overflow chunk
+        if (const auto * info = detail::getInfoFromChunk(chunk))
+        {
+            bucket_num = info->bucket_num;
 
-        // LOG_DEBUG(&Poco::Logger::get("debug"), "processChunk input {} bucket_num {}", input, bucket_num);
+            /// todo: think once again about overflow chunk
 
-        if (!info->is_overflows && info->bucket_num == -1)
-            some_input_has_single_level_chunks = true;
+            // LOG_DEBUG(&Poco::Logger::get("debug"), "processChunk input {} bucket_num {}", input, bucket_num);
 
-        if (info->bucket_num >= 0)
-            some_input_has_two_level_chunks = true;
+            if (!info->is_overflows && info->bucket_num == -1)
+                some_input_has_single_level_chunks = true;
 
-        if (info->is_bucket_sorted)
-            some_input_has_sorted_chunk = true;
+            if (info->bucket_num >= 0)
+                some_input_has_two_level_chunks = true;
 
-        if (info->is_overflows)
+            if (info->is_bucket_sorted)
+                some_input_has_sorted_chunk = true;
+        }
+
+        if (is_overflows)
             LOG_DEBUG(&Poco::Logger::get("debug"), "overflow chunk input {}", input);
 
-        if (bucket_num == -1 && !info->is_overflows)
+        if (bucket_num == -1 && !is_overflows)
             single_level_chunks[input].emplace_back(std::move(chunk));
         else
         {
@@ -618,7 +620,7 @@ private:
     Processors expandPipeline() override
     {
         if (processors.empty())
-            throw Exception("No processors prepared for expandPipeline()", ErrorCodes::LOGICAL_ERROR);
+            throw Exception(ErrorCodes::LOGICAL_ERROR, "No processors prepared for expandPipeline");
 
         const auto & header = inputs.front().getHeader();
 
