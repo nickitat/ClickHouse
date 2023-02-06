@@ -81,7 +81,6 @@ select a, count() from pr_t group by a, b order by a limit 5 offset 500;
 -- { echoOff } --
 
 drop table pr_t;
-drop table dist_pr_t;
 drop table dist_t_different_dbs;
 drop table shard_1.t_different_dbs;
 

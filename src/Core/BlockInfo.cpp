@@ -22,7 +22,7 @@ void BlockInfo::write(WriteBuffer & out, size_t revision) const
 {
 /// Set of pairs `FIELD_NUM`, value in binary form. Then 0.
 #define WRITE_FIELD(TYPE, NAME, DEFAULT, FIELD_NUM, MIN_SUPPORTED_REVISION) \
-    if (revision + 10 >= (MIN_SUPPORTED_REVISION)) \
+    if (revision >= (MIN_SUPPORTED_REVISION)) \
     { \
         writeVarUInt(FIELD_NUM, out); \
         writeBinary(NAME, out); \

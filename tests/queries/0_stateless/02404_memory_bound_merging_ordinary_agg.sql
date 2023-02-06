@@ -1,4 +1,4 @@
--- Tags: no-parallel
+-- Tags: no-parallel, no-random-merge-tree-settings
 
 create table t(a UInt64, b UInt64) engine=MergeTree order by a;
 system stop merges t;
@@ -62,16 +62,16 @@ drop table shard_1.t_different_dbs;
 set allow_experimental_parallel_reading_from_replicas = 1;
 set max_parallel_replicas = 3;
 set use_hedged_requests = 0;
+set cluster_for_parallel_replicas = 'test_cluster_one_shard_three_replicas_localhost';
 
 create table pr_t(a UInt64, b UInt64) engine=MergeTree order by a;
 insert into pr_t select number % 1000, number % 1000 from numbers_mt(1e4);
-create table dist_pr_t as pr_t engine = Distributed(test_cluster_one_shard_three_replicas_localhost, currentDatabase(), pr_t);
 
 -- { echoOn } --
-explain pipeline select a from dist_pr_t group by a order by a limit 5 offset 500;
+explain pipeline select a from pr_t group by a order by a limit 5 offset 500;
 
-select a, count() from dist_pr_t group by a order by a limit 5 offset 500;
-select a, count() from dist_pr_t group by a, b order by a limit 5 offset 500;
+select a, count() from pr_t group by a order by a limit 5 offset 500;
+select a, count() from pr_t group by a, b order by a limit 5 offset 500;
 
 -- { echoOff } --
 

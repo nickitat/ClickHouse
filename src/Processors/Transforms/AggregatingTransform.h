@@ -3,7 +3,6 @@
 #include <IO/ReadBufferFromFile.h>
 #include <Interpreters/Aggregator.h>
 #include <Processors/IAccumulatingTransform.h>
-#include <Poco/Logger.h>
 #include <Common/Stopwatch.h>
 #include <Common/setThreadName.h>
 #include <Common/scope_guard_safe.h>

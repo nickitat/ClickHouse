@@ -17,11 +17,11 @@ const AggregatedChunkInfo * getInfoFromChunk(const Chunk & chunk)
 {
     const auto & info = chunk.getChunkInfo();
     if (!info)
-        throw Exception("Chunk info was not set for chunk.", ErrorCodes::LOGICAL_ERROR);
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Chunk info was not set for chunk.");
 
     const auto * agg_info = typeid_cast<const AggregatedChunkInfo *>(info.get());
     if (!agg_info)
-        throw Exception("Chunk should have AggregatedChunkInfo.", ErrorCodes::LOGICAL_ERROR);
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "Chunk should have AggregatedChunkInfo.");
 
     return agg_info;
 }

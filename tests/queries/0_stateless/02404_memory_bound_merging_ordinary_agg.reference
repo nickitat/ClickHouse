@@ -121,7 +121,7 @@ select a, count() from dist_t_different_dbs group by a, b order by a limit 5 off
 503	200
 504	200
 -- { echoOn } --
-explain pipeline select a from dist_pr_t group by a order by a limit 5 offset 500;
+explain pipeline select a from pr_t group by a order by a limit 5 offset 500;
 (Expression)
 ExpressionTransform
   (Limit)
@@ -142,15 +142,16 @@ ExpressionTransform
                       (Expression)
                       ExpressionTransform
                         (ReadFromMergeTree)
-                        MergeTreeInOrder 0 → 1
+                        ReadFromMergeTreeDependency 2 → 1
+                          MergeTreeThread 0 → 1
                     (ReadFromRemoteParallelReplicas)
-select a, count() from dist_pr_t group by a order by a limit 5 offset 500;
+select a, count() from pr_t group by a order by a limit 5 offset 500;
 500	10
 501	10
 502	10
 503	10
 504	10
-select a, count() from dist_pr_t group by a, b order by a limit 5 offset 500;
+select a, count() from pr_t group by a, b order by a limit 5 offset 500;
 500	10
 501	10
 502	10
