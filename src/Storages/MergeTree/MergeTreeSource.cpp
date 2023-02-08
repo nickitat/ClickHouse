@@ -1,7 +1,8 @@
-#include <Storages/MergeTree/MergeTreeSource.h>
-#include <Storages/MergeTree/MergeTreeBaseSelectProcessor.h>
-#include <Interpreters/threadPoolCallbackRunner.h>
+#include <iterator>
 #include <IO/IOThreadPool.h>
+#include <Interpreters/threadPoolCallbackRunner.h>
+#include <Storages/MergeTree/MergeTreeBaseSelectProcessor.h>
+#include <Storages/MergeTree/MergeTreeSource.h>
 #include <Common/EventFD.h>
 
 namespace DB
@@ -48,7 +49,7 @@ struct MergeTreeSource::AsyncReadingState
         ///   * background thread changes status InProgress -> IsFinished
         ///   * (status == InProgress) => (MergeTreeBaseSelectProcessor is alive)
 
-        void setResult(ChunkAndProgress chunk_)
+        void setResult(ChunksAndProgress chunk_)
         {
             chassert(stage == Stage::InProgress);
             chunk = std::move(chunk_);
@@ -71,7 +72,7 @@ struct MergeTreeSource::AsyncReadingState
         EventFD event;
         std::atomic<Stage> stage = Stage::NotStarted;
 
-        ChunkAndProgress chunk;
+        ChunksAndProgress chunk;
         std::exception_ptr exception;
 
         void finish()
@@ -80,7 +81,7 @@ struct MergeTreeSource::AsyncReadingState
             event.write();
         }
 
-        ChunkAndProgress getResult()
+        ChunksAndProgress getResult()
         {
             chassert(stage == Stage::IsFinished);
             event.read();
@@ -116,10 +117,7 @@ struct MergeTreeSource::AsyncReadingState
         }
     }
 
-    ChunkAndProgress getResult()
-    {
-        return control->getResult();
-    }
+    ChunksAndProgress getResult() { return control->getResult(); }
 
     Stage getStage() const { return control->stage; }
     int getFD() const { return control->event.fd; }
@@ -168,13 +166,12 @@ ISource::Status MergeTreeSource::prepare()
         return ISource::Status::Finished;
     }
 
-    if (async_reading_state && async_reading_state->getStage() == AsyncReadingState::Stage::InProgress)
+    if (async_reading_state && async_reading_state->getStage() == AsyncReadingState::Stage::InProgress && chunks.empty())
         return ISource::Status::Async;
 #endif
 
     return ISource::prepare();
 }
-
 
 std::optional<Chunk> MergeTreeSource::reportProgress(ChunkAndProgress chunk)
 {
@@ -187,6 +184,21 @@ std::optional<Chunk> MergeTreeSource::reportProgress(ChunkAndProgress chunk)
     return {};
 }
 
+std::optional<Chunk> MergeTreeSource::reportProgress(ChunksAndProgress chunk)
+{
+    if (chunk.num_read_rows || chunk.num_read_bytes)
+        progress(chunk.num_read_rows, chunk.num_read_bytes);
+
+    if (chunk.num_read_rows)
+    {
+        auto ret = std::move(chunk.chunks.front());
+        chunk.chunks.pop_front();
+        chunks.insert(chunks.end(), std::make_move_iterator(chunk.chunks.begin()), std::make_move_iterator(chunk.chunks.end()));
+        return std::move(ret);
+    }
+
+    return {};
+}
 
 std::optional<Chunk> MergeTreeSource::tryGenerate()
 {
@@ -195,6 +207,13 @@ std::optional<Chunk> MergeTreeSource::tryGenerate()
     {
         if (async_reading_state->getStage() == AsyncReadingState::Stage::IsFinished)
             return reportProgress(async_reading_state->getResult());
+
+        if (!chunks.empty())
+        {
+            auto ret = std::move(chunks.front());
+            chunks.pop_front();
+            return std::move(ret);
+        }
 
         chassert(async_reading_state->getStage() == AsyncReadingState::Stage::NotStarted);
 
@@ -206,7 +225,19 @@ std::optional<Chunk> MergeTreeSource::tryGenerate()
 
             try
             {
-                holder->setResult(algorithm->read());
+                ChunksAndProgress res;
+                while (res.num_read_rows < algorithm->max_block_size_rows && res.num_read_bytes < algorithm->preferred_block_size_bytes)
+                {
+                    auto cur = algorithm->read();
+                    if (!cur.chunk)
+                    {
+                        break;
+                    }
+                    res.chunks.push_back(std::move(cur.chunk));
+                    res.num_read_bytes += cur.num_read_bytes;
+                    res.num_read_rows += cur.num_read_rows;
+                }
+                holder->setResult(std::move(res));
             }
             catch (...)
             {

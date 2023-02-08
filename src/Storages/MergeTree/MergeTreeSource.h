@@ -9,6 +9,15 @@ using MergeTreeSelectAlgorithmPtr = std::unique_ptr<IMergeTreeSelectAlgorithm>;
 
 struct ChunkAndProgress;
 
+struct ChunksAndProgress
+{
+    using Chunks = std::list<Chunk>;
+
+    Chunks chunks;
+    size_t num_read_rows = 0;
+    size_t num_read_bytes = 0;
+};
+
 class MergeTreeSource final : public ISource
 {
 public:
@@ -31,12 +40,15 @@ protected:
 private:
     MergeTreeSelectAlgorithmPtr algorithm;
 
+    ChunksAndProgress::Chunks chunks;
+
 #if defined(OS_LINUX)
     struct AsyncReadingState;
     std::unique_ptr<AsyncReadingState> async_reading_state;
 #endif
 
-    std::optional<Chunk> reportProgress(ChunkAndProgress chunk);
+    std::optional<Chunk> reportProgress(ChunkAndProgress hunk);
+    std::optional<Chunk> reportProgress(ChunksAndProgress hunk);
 };
 
 }

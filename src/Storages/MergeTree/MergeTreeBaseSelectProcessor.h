@@ -71,7 +71,6 @@ public:
 
     virtual std::string getName() const = 0;
 
-protected:
     /// This struct allow to return block with no columns but with non-zero number of rows similar to Chunk
     struct BlockAndProgress
     {
