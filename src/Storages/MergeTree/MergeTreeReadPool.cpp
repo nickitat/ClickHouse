@@ -124,8 +124,8 @@ MergeTreeReadTaskPtr MergeTreeReadPool::getTask(size_t thread)
         return nullptr;
 
     const auto tasks_remaining_for_this_thread = !threads_tasks[thread].sum_marks_in_parts.empty();
-    if (!tasks_remaining_for_this_thread && do_not_steal_tasks)
-        return nullptr;
+    /* if (!tasks_remaining_for_this_thread && do_not_steal_tasks) */
+    /* return nullptr; */
 
     /// Steal task if nothing to do and it's not prohibited
     auto thread_idx = thread;
@@ -135,6 +135,7 @@ MergeTreeReadTaskPtr MergeTreeReadPool::getTask(size_t thread)
         // Grab the entire tasks of a thread which is killed by backoff
         if (it != remaining_thread_tasks.end())
         {
+            /* LOG_DEBUG(log, "thread_idx={} stole task from *it={}", thread_idx, *it); */
             threads_tasks[thread] = std::move(threads_tasks[*it]);
             remaining_thread_tasks.erase(it);
             remaining_thread_tasks.insert(thread);
@@ -144,6 +145,7 @@ MergeTreeReadTaskPtr MergeTreeReadPool::getTask(size_t thread)
             it = remaining_thread_tasks.upper_bound(thread);
             if (it == remaining_thread_tasks.end())
                 it = remaining_thread_tasks.begin();
+            /* LOG_DEBUG(log, "thread_idx={} stole task from *it={}", thread_idx, *it); */
             thread_idx = *it;
         }
     }
@@ -157,7 +159,7 @@ MergeTreeReadTaskPtr MergeTreeReadPool::getTask(size_t thread)
 
     size_t need_marks;
     if (is_part_on_remote_disk[part_idx]) /// For better performance with remote disks
-        need_marks = marks_in_part;
+        need_marks = std::max(marks_in_part / 2, min_marks_for_concurrent_read);
     else /// Get whole part to read if it is small enough.
         need_marks = std::min(marks_in_part, min_marks_for_concurrent_read);
 
@@ -165,6 +167,8 @@ MergeTreeReadTaskPtr MergeTreeReadPool::getTask(size_t thread)
     if (marks_in_part > need_marks &&
         marks_in_part - need_marks < min_marks_for_concurrent_read)
         need_marks = marks_in_part;
+
+    // LOG_DEBUG(&Poco::Logger::get("debug"), "need_marks={}", need_marks);
 
     MarkRanges ranges_to_get_from_part;
 

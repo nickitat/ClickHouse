@@ -63,6 +63,8 @@ struct Span
         return trace_id != UUID();
     }
 
+    void bindToCurrentThread() noexcept;
+
 private:
     bool addAttributeImpl(std::string_view name, std::string_view value) noexcept;
 };

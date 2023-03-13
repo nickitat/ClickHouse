@@ -191,6 +191,8 @@ Chunk MergeTreeSource::processReadResult(ChunkAndProgress chunk)
 
 std::optional<Chunk> MergeTreeSource::tryGenerate()
 {
+    auto span = std::make_shared<OpenTelemetry::SpanHolder>("MergeTreeSource::tryGenerate()");
+
 #if defined(OS_LINUX)
     if (async_reading_state)
     {
@@ -201,7 +203,7 @@ std::optional<Chunk> MergeTreeSource::tryGenerate()
 
         /// It is important to store control into job.
         /// Otherwise, race between job and ~MergeTreeBaseSelectProcessor is possible.
-        auto job = [this, control = async_reading_state->start()]() mutable
+        auto job = [this, control = async_reading_state->start(), span = std::move(span)]() mutable
         {
             auto holder = std::move(control);
 
@@ -221,6 +223,7 @@ std::optional<Chunk> MergeTreeSource::tryGenerate()
     }
 #endif
 
+    span->bindToCurrentThread();
     return processReadResult(algorithm->read());
 }
 

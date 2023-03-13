@@ -92,6 +92,11 @@ bool Span::addAttributeImpl(std::string_view name, std::string_view value) noexc
     return true;
 }
 
+void Span::bindToCurrentThread() noexcept
+{
+    this->addAttribute("clickhouse.thread_id", getThreadId());
+}
+
 SpanHolder::SpanHolder(std::string_view _operation_name, SpanKind _kind)
 {
     if (!current_thread_trace_context.isTraceEnabled())
@@ -368,7 +373,7 @@ TracingContextHolder::~TracingContextHolder()
             {
                 /// This object is created to initialize tracing context on a new thread,
                 /// it's helpful to record the thread_id so that we know the thread switching from the span log
-                this->root_span.addAttribute("clickhouse.thread_id", getThreadId());
+                this->root_span.bindToCurrentThread();
             }
             catch (...)
             {

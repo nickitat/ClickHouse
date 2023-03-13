@@ -564,6 +564,8 @@ struct PartRangesReadInfo
             min_rows_for_concurrent_read, min_bytes_for_concurrent_read,
             data_settings.index_granularity, index_granularity_bytes, sum_marks);
 
+        LOG_DEBUG(&Poco::Logger::get("debug"), "min_marks_for_concurrent_read={}", min_marks_for_concurrent_read);
+
         use_uncompressed_cache = settings.use_uncompressed_cache;
         if (sum_marks > max_marks_to_use_cache)
             use_uncompressed_cache = false;

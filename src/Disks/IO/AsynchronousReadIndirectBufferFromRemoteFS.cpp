@@ -135,7 +135,7 @@ void AsynchronousReadIndirectBufferFromRemoteFS::prefetch(int64_t priority)
     if (!hasPendingDataToRead())
         return;
 
-    last_prefetch_info.submit_time = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    last_prefetch_info.submit_time = std::chrono::system_clock::now();
     last_prefetch_info.priority = priority;
 
     /// Prefetch even in case hasPendingData() == true.

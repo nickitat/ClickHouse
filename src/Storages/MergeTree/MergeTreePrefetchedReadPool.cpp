@@ -134,7 +134,8 @@ void MergeTreePrefetchedReadPool::createPrefetchedReaderForTask(MergeTreeReadTas
 
 bool MergeTreePrefetchedReadPool::TaskHolder::operator <(const TaskHolder & other) const
 {
-    return task->priority < other.task->priority;
+    /// priority_queue.begin() will point to the element with the highest priority which is the opposite to what we want, so let's invert the comparator.
+    return task->priority > other.task->priority;
 }
 
 void MergeTreePrefetchedReadPool::startPrefetches() const
@@ -178,9 +179,7 @@ MergeTreeReadTaskPtr MergeTreePrefetchedReadPool::getTask(size_t thread)
             /// losing a prefetch by creating our own reader (or resusing our own reader if the part
             /// is the same as last read by this thread).
             auto & thread_tasks = thread_tasks_it->second;
-            auto task_it = std::find_if(
-                thread_tasks.begin(), thread_tasks.end(),
-                [](const auto & task) { return task->reader.valid(); });
+            auto task_it = std::find_if(thread_tasks.begin(), thread_tasks.end(), [](const auto & task) { return task->reader.valid(); });
 
             if (task_it == thread_tasks.end())
             {
@@ -191,8 +190,7 @@ MergeTreeReadTaskPtr MergeTreePrefetchedReadPool::getTask(size_t thread)
                     non_prefetched_tasks_to_steal = thread_tasks_it;
             }
             /// Try to steal task with the best (lowest) priority (because it will be executed faster).
-            else if (prefetched_tasks_to_steal == threads_tasks.end()
-                || (*task_it)->priority < best_prefetched_task_priority)
+            else if (prefetched_tasks_to_steal == threads_tasks.end() || (*task_it)->priority < best_prefetched_task_priority)
             {
                 best_prefetched_task_priority = (*task_it)->priority;
                 chassert(best_prefetched_task_priority >= 0);
@@ -205,16 +203,18 @@ MergeTreeReadTaskPtr MergeTreePrefetchedReadPool::getTask(size_t thread)
             auto & thread_tasks = prefetched_tasks_to_steal->second;
             assert(!thread_tasks.empty());
 
-            auto task_it = std::find_if(
-                thread_tasks.begin(), thread_tasks.end(),
-                [](const auto & task) { return task->reader.valid(); });
+            auto task_it = std::find_if(thread_tasks.begin(), thread_tasks.end(), [](const auto & task) { return task->reader.valid(); });
             assert(task_it != thread_tasks.end());
+
+            const auto stole_from = prefetched_tasks_to_steal->first;
 
             auto task = std::move(*task_it);
             thread_tasks.erase(task_it);
 
             if (thread_tasks.empty())
                 threads_tasks.erase(prefetched_tasks_to_steal);
+
+            LOG_DEBUG(log, "Thread {} stole a prefetched task from thread {}", thread, stole_from);
 
             return task;
         }
@@ -227,26 +227,14 @@ MergeTreeReadTaskPtr MergeTreePrefetchedReadPool::getTask(size_t thread)
             auto & thread_tasks = non_prefetched_tasks_to_steal->second;
             assert(!thread_tasks.empty());
 
-            /// Get second half of the tasks.
-            const size_t total_tasks = thread_tasks.size();
-            const size_t half = total_tasks / 2;
-            auto half_it = thread_tasks.begin() + half;
-            assert(half_it != thread_tasks.end());
+            const auto stole_from = non_prefetched_tasks_to_steal->first;
 
-            /// Give them to current thread, as current thread's tasks list is empty.
-            auto & current_thread_tasks = threads_tasks[thread];
-            current_thread_tasks.insert(
-                current_thread_tasks.end(), make_move_iterator(half_it), make_move_iterator(thread_tasks.end()));
-
-            /// Erase them from the thread from which we steal.
-            thread_tasks.resize(half);
+            auto task = std::move(thread_tasks.front());
+            thread_tasks.pop_front();
             if (thread_tasks.empty())
                 threads_tasks.erase(non_prefetched_tasks_to_steal);
 
-            auto task = std::move(current_thread_tasks.front());
-            current_thread_tasks.erase(current_thread_tasks.begin());
-            if (current_thread_tasks.empty())
-                threads_tasks.erase(thread);
+            LOG_DEBUG(log, "Thread {} stole a non-prefetched task from thread {}", thread, stole_from);
 
             return task;
         }
@@ -358,10 +346,10 @@ MergeTreePrefetchedReadPool::ThreadsTasks MergeTreePrefetchedReadPool::createThr
     }
 
     size_t min_prefetch_step_marks = 0;
-    if (settings.filesystem_prefetches_limit && settings.filesystem_prefetches_limit < sum_marks)
-    {
-        min_prefetch_step_marks = static_cast<size_t>(std::round(static_cast<double>(sum_marks) / settings.filesystem_prefetches_limit));
-    }
+    /* if (settings.filesystem_prefetches_limit && settings.filesystem_prefetches_limit < sum_marks) */
+    /* { */
+    /* min_prefetch_step_marks = static_cast<size_t>(std::round(static_cast<double>(sum_marks) / settings.filesystem_prefetches_limit)); */
+    /* } */
 
     size_t total_prefetches_approx = 0;
     for (const auto & part : parts_infos)
@@ -419,13 +407,18 @@ MergeTreePrefetchedReadPool::ThreadsTasks MergeTreePrefetchedReadPool::createThr
 
     LOG_DEBUG(
         log,
-        "Sum marks: {}, threads: {}, min_marks_per_thread: {}, result prefetch step marks: {}, prefetches limit: {}, total_size_approx: {}",
-        sum_marks, threads, min_marks_per_thread, settings.filesystem_prefetch_step_bytes, settings.filesystem_prefetches_limit, total_size_approx);
+        "Sum marks: {}, threads: {}, min_marks_per_thread: {}, prefetches limit: {}, total_size_approx: {}",
+        sum_marks,
+        threads,
+        min_marks_per_thread,
+        settings.filesystem_prefetches_limit,
+        total_size_approx);
 
     size_t current_prefetches_count = 0;
     prefetch_queue.reserve(total_prefetches_approx);
 
     ThreadsTasks result_threads_tasks;
+    size_t total_tasks = 0;
     size_t memory_usage_approx = 0;
     for (size_t i = 0, part_idx = 0; i < threads && part_idx < parts_infos.size(); ++i)
     {
@@ -534,12 +527,17 @@ MergeTreePrefetchedReadPool::ThreadsTasks MergeTreePrefetchedReadPool::createThr
             ++priority;
 
             result_threads_tasks[i].push_back(std::move(read_task));
+            ++total_tasks;
         }
     }
 
-    LOG_TEST(
-        log, "Result tasks {} for {} threads: {}",
-        result_threads_tasks.size(), threads, dumpTasks(result_threads_tasks));
+    LOG_DEBUG(
+        log,
+        "Result tasks {} ({} of them will be prefetched) for {} threads: {}",
+        total_tasks,
+        prefetch_queue.size(),
+        result_threads_tasks.size(),
+        dumpTasks(result_threads_tasks));
 
     return result_threads_tasks;
 }
