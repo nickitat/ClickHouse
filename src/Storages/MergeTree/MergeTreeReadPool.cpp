@@ -164,11 +164,10 @@ MergeTreeReadTaskPtr MergeTreeReadPool::getTask(size_t thread)
         need_marks = std::min(marks_in_part, min_marks_for_concurrent_read);
 
     /// Do not leave too little rows in part for next time.
-    if (marks_in_part > need_marks &&
-        marks_in_part - need_marks < min_marks_for_concurrent_read)
+    if (marks_in_part > need_marks && marks_in_part - need_marks < min_marks_for_concurrent_read / 2)
         need_marks = marks_in_part;
 
-    // LOG_DEBUG(&Poco::Logger::get("debug"), "need_marks={}", need_marks);
+    /* LOG_TRACE(&Poco::Logger::get("debug"), "need_marks={}", need_marks); */
 
     MarkRanges ranges_to_get_from_part;
 
