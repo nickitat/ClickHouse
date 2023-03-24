@@ -66,6 +66,7 @@ CachedOnDiskReadBufferFromFile::CachedOnDiskReadBufferFromFile(
     , use_external_buffer(use_external_buffer_)
     , query_context_holder(cache_->getQueryContextHolder(query_id, settings_))
     , is_persistent(settings_.is_file_cache_persistent)
+    , total_file_size(file_size_)
 {
 }
 
@@ -119,7 +120,7 @@ void CachedOnDiskReadBufferFromFile::initialize(size_t offset, size_t size)
     else
     {
         CreateFileSegmentSettings create_settings(is_persistent ? FileSegmentKind::Persistent : FileSegmentKind::Regular);
-        file_segments_holder.emplace(cache->getOrSet(cache_key, offset, size, create_settings));
+        file_segments_holder.emplace(cache->getOrSet(cache_key, offset, size, total_file_size, create_settings));
     }
 
     /**

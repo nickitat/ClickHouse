@@ -1,17 +1,18 @@
 #include "FileCache.h"
 
-#include <Common/randomSeed.h>
-#include <Common/SipHash.h>
-#include <Common/logger_useful.h>
+#include <filesystem>
+#include <sstream>
+#include <IO/Operators.h>
+#include <IO/ReadHelpers.h>
+#include <IO/ReadSettings.h>
+#include <IO/WriteBufferFromFile.h>
+#include <IO/WriteBufferFromString.h>
 #include <Interpreters/Cache/FileCacheSettings.h>
 #include <Interpreters/Cache/LRUFileCachePriority.h>
-#include <IO/ReadHelpers.h>
-#include <IO/WriteBufferFromFile.h>
-#include <IO/ReadSettings.h>
-#include <IO/WriteBufferFromString.h>
-#include <IO/Operators.h>
 #include <pcg-random/pcg_random.hpp>
-#include <filesystem>
+#include <Common/SipHash.h>
+#include <Common/logger_useful.h>
+#include <Common/randomSeed.h>
 
 
 namespace fs = std::filesystem;
@@ -409,6 +410,29 @@ void FileCache::fillHolesWithEmptyFileSegments(
                 splitRangeIntoCells(key, current_pos, hole_size, FileSegment::State::EMPTY, settings, cache_lock));
         }
     }
+}
+
+FileSegmentsHolder
+FileCache::getOrSet(const Key & key, size_t offset, size_t size, size_t total_file_size, const CreateFileSegmentSettings & settings)
+{
+    static constexpr size_t DOWNLOAD_ALIGNMENT = 8 * 1024 * 1024;
+    const auto aligned_offset = (offset / DOWNLOAD_ALIGNMENT) * DOWNLOAD_ALIGNMENT;
+    const auto aligned_size = std::min(DOWNLOAD_ALIGNMENT, total_file_size - aligned_offset);
+    auto x = getOrSet(key, aligned_offset, aligned_size, settings);
+
+    /* auto print = [&](const auto & xxx) */
+    /* { */
+    /* std::stringstream ss; */
+    /* for (const auto & s : xxx.file_segments) */
+    /* { */
+    /* ss << fmt::format("{}, ", static_cast<const void *>(s.get())); */
+    /* } */
+    /* LOG_DEBUG(&Poco::Logger::get("debug"), "ss={}", ss.str()); */
+    /* }; */
+    auto res = getOrSet(key, offset, size, settings);
+    /* print(x); */
+    /* print(res); */
+    return res;
 }
 
 FileSegmentsHolder FileCache::getOrSet(const Key & key, size_t offset, size_t size, const CreateFileSegmentSettings & settings)

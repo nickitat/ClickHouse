@@ -146,6 +146,8 @@ private:
     FileCache::QueryContextHolder query_context_holder;
 
     bool is_persistent;
+
+    size_t total_file_size;
 };
 
 }

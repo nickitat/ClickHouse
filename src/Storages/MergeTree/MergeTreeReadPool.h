@@ -106,6 +106,8 @@ private:
         size_t threads, size_t sum_marks, std::vector<size_t> per_part_sum_marks,
         const RangesInDataParts & parts);
 
+    const size_t sum_marks;
+
     /// Initialized in constructor
     StorageSnapshotPtr storage_snapshot;
     const Names column_names;

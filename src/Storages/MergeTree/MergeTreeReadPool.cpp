@@ -33,7 +33,8 @@ MergeTreeReadPool::MergeTreeReadPool(
     const Names & virtual_column_names_,
     ContextPtr context_,
     bool do_not_steal_tasks_)
-    : storage_snapshot(storage_snapshot_)
+    : sum_marks(sum_marks_)
+    , storage_snapshot(storage_snapshot_)
     , column_names(column_names_)
     , virtual_column_names(virtual_column_names_)
     , min_marks_for_concurrent_read(min_marks_for_concurrent_read_)
@@ -118,10 +119,14 @@ MergeTreeReadTaskPtr MergeTreeReadPool::getTask(size_t thread)
 
     /// If number of threads was lowered due to backoff, then will assign work only for maximum 'backoff_state.current_threads' threads.
     if (thread >= backoff_state.current_threads)
-        return nullptr;
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "backoff_state.current_threads={}", backoff_state.current_threads);
+    // return nullptr;
 
     if (remaining_thread_tasks.empty())
+    {
+        /* LOG_INFO(&Poco::Logger::get("debug"), "remaining_thread_tasks.empty()"); */
         return nullptr;
+    }
 
     const auto tasks_remaining_for_this_thread = !threads_tasks[thread].sum_marks_in_parts.empty();
     /* if (!tasks_remaining_for_this_thread && do_not_steal_tasks) */
@@ -142,6 +147,10 @@ MergeTreeReadTaskPtr MergeTreeReadPool::getTask(size_t thread)
         }
         else // Try steal tasks from the next thread
         {
+            /* it = remaining_thread_tasks.begin(); */
+            /* for (auto it2 = remaining_thread_tasks.begin(); it2 != remaining_thread_tasks.end(); ++it2) */
+            /* if (threads_tasks[*it2].sum_marks_in_parts.back() > threads_tasks[*it].sum_marks_in_parts.back()) */
+            /* it = it2; */
             it = remaining_thread_tasks.upper_bound(thread);
             if (it == remaining_thread_tasks.end())
                 it = remaining_thread_tasks.begin();
@@ -167,14 +176,14 @@ MergeTreeReadTaskPtr MergeTreeReadPool::getTask(size_t thread)
     if (marks_in_part > need_marks && marks_in_part - need_marks < min_marks_for_concurrent_read / 2)
         need_marks = marks_in_part;
 
-    /* LOG_TRACE(&Poco::Logger::get("debug"), "need_marks={}", need_marks); */
+    /* LOG_INFO(&Poco::Logger::get("debug"), "need_marks={}", need_marks); */
 
     MarkRanges ranges_to_get_from_part;
 
     /// Get whole part to read if it is small enough.
     if (marks_in_part <= need_marks)
     {
-        ranges_to_get_from_part = thread_task.ranges;
+        ranges_to_get_from_part = std::move(thread_task.ranges);
         marks_in_part = 0;
 
         thread_tasks.parts_and_ranges.pop_back();
@@ -259,9 +268,7 @@ void MergeTreeReadPool::profileFeedback(ReadBufferFromFileBase::ProfileInfo info
 }
 
 
-void MergeTreeReadPool::fillPerThreadInfo(
-    size_t threads, size_t sum_marks, std::vector<size_t> per_part_sum_marks,
-    const RangesInDataParts & parts)
+void MergeTreeReadPool::fillPerThreadInfo(size_t threads, size_t, std::vector<size_t> per_part_sum_marks, const RangesInDataParts & parts)
 {
     threads_tasks.resize(threads);
     if (parts.empty())
@@ -297,6 +304,8 @@ void MergeTreeReadPool::fillPerThreadInfo(
     }
 
     const size_t min_marks_per_thread = (sum_marks - 1) / threads + 1;
+
+    /* LOG_DEBUG(&Poco::Logger::get("debug"), "min_marks_per_thread={}", min_marks_per_thread); */
 
     for (size_t i = 0; i < threads && !parts_queue.empty(); ++i)
     {
