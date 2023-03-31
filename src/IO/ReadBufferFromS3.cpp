@@ -21,6 +21,7 @@
 namespace ProfileEvents
 {
     extern const Event ReadBufferFromS3Microseconds;
+    extern const Event ReadBufferFromS3Reads;
     extern const Event ReadBufferFromS3InitMicroseconds;
     extern const Event ReadBufferFromS3Bytes;
     extern const Event ReadBufferFromS3RequestsErrors;
@@ -133,12 +134,14 @@ bool ReadBufferFromS3::nextImpl()
             /// Try to read a next portion of data.
             next_result = impl->next();
             watch.stop();
+            ProfileEvents::increment(ProfileEvents::ReadBufferFromS3Reads);
             ProfileEvents::increment(ProfileEvents::ReadBufferFromS3Microseconds, watch.elapsedMicroseconds());
             break;
         }
         catch (Exception & e)
         {
             watch.stop();
+            ProfileEvents::increment(ProfileEvents::ReadBufferFromS3Reads);
             ProfileEvents::increment(ProfileEvents::ReadBufferFromS3Microseconds, watch.elapsedMicroseconds());
             ProfileEvents::increment(ProfileEvents::ReadBufferFromS3RequestsErrors, 1);
 

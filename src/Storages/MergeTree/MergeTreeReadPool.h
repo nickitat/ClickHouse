@@ -119,6 +119,7 @@ private:
     RangesInDataParts parts_ranges;
     bool predict_block_size_bytes;
     bool do_not_steal_tasks;
+    bool use_const_size_tasks;
 
     std::vector<PerPartParams> per_part_params;
     std::vector<bool> is_part_on_remote_disk;

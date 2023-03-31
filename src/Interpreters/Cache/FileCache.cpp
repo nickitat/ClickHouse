@@ -412,27 +412,46 @@ void FileCache::fillHolesWithEmptyFileSegments(
     }
 }
 
-FileSegmentsHolder
-FileCache::getOrSet(const Key & key, size_t offset, size_t size, size_t total_file_size, const CreateFileSegmentSettings & settings)
+FileSegmentsHolder FileCache::getOrSet(const Key & key, size_t offset, size_t size, size_t, const CreateFileSegmentSettings & settings)
 {
-    static constexpr size_t DOWNLOAD_ALIGNMENT = 8 * 1024 * 1024;
-    const auto aligned_offset = (offset / DOWNLOAD_ALIGNMENT) * DOWNLOAD_ALIGNMENT;
-    const auto aligned_size = std::min(DOWNLOAD_ALIGNMENT, total_file_size - aligned_offset);
-    auto x = getOrSet(key, aligned_offset, aligned_size, settings);
+    return getOrSet(key, offset, size, settings);
 
-    /* auto print = [&](const auto & xxx) */
+    /* static constexpr size_t DOWNLOAD_ALIGNMENT = 8 * 1024 * 1024; */
+    /* const auto aligned_offset = (offset / DOWNLOAD_ALIGNMENT) * DOWNLOAD_ALIGNMENT; */
+    /* const auto new_end = std::min(((offset + size + DOWNLOAD_ALIGNMENT - 1) / DOWNLOAD_ALIGNMENT) * DOWNLOAD_ALIGNMENT, total_file_size); */
+    /* const auto aligned_size = new_end - aligned_offset; */
+
+    /* FileSegments file_segments; */
     /* { */
-    /* std::stringstream ss; */
-    /* for (const auto & s : xxx.file_segments) */
+    /* assertInitialized(); */
+    /* #ifndef NDEBUG */
+    /* assertCacheCorrectness(); */
+    /* #endif */
+
+    /* FileSegment::Range range(aligned_offset, aligned_offset + aligned_size - 1); */
+
+    /* auto locked_key = createLockedKey(key, KeyNotFoundPolicy::CREATE_EMPTY); */
+
+    /* /// Get all segments which intersect with the given range. */
+    /* file_segments = getImpl(*locked_key, range); */
+    /* if (file_segments.empty()) */
     /* { */
-    /* ss << fmt::format("{}, ", static_cast<const void *>(s.get())); */
+    /* file_segments = splitRangeInfoFileSegments(*locked_key, offset, size, FileSegment::State::EMPTY, settings); */
     /* } */
-    /* LOG_DEBUG(&Poco::Logger::get("debug"), "ss={}", ss.str()); */
-    /* }; */
-    auto res = getOrSet(key, offset, size, settings);
-    /* print(x); */
-    /* print(res); */
-    return res;
+    /* else */
+    /* { */
+    /* fillHolesWithEmptyFileSegments(*locked_key, file_segments, range, /1* fill_with_detached *1/ false, settings); */
+    /* } */
+
+    /* while (!file_segments.empty() && file_segments.front()->range().right < offset) */
+    /* file_segments.pop_front(); */
+
+    /* while (!file_segments.empty() && file_segments.back()->range().left >= offset + size) */
+    /* file_segments.pop_back(); */
+
+    /* chassert(!file_segments.empty()); */
+    /* } */
+    /* return FileSegmentsHolder(std::move(file_segments)); */
 }
 
 FileSegmentsHolder FileCache::getOrSet(const Key & key, size_t offset, size_t size, const CreateFileSegmentSettings & settings)

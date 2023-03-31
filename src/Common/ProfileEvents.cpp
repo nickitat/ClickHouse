@@ -350,6 +350,7 @@ The server successfully detected this situation and will download merged part fr
     M(DiskS3GetObject, "Number of DiskS3 API GetObject calls.") \
     \
     M(ReadBufferFromS3Microseconds, "Time spend in reading from S3.") \
+    M(ReadBufferFromS3Reads, "Time spend in reading from S3.") \
     M(ReadBufferFromS3InitMicroseconds, "Time spend initializing connection to S3.") \
     M(ReadBufferFromS3Bytes, "Bytes read from S3.") \
     M(ReadBufferFromS3RequestsErrors, "Number of exceptions while reading from S3.") \

@@ -20,6 +20,14 @@ namespace ErrorCodes
 namespace DB
 {
 
+size_t getApproxSizeOfGranule(const IMergeTreeDataPart & part, const Names & columns_to_read)
+{
+    ColumnSize columns_size{};
+    for (const auto & col_name : columns_to_read)
+        columns_size.add(part.getColumnSize(col_name));
+    return columns_size.data_compressed;
+}
+
 MergeTreeReadPool::MergeTreeReadPool(
     size_t threads_,
     size_t sum_marks_,
@@ -44,9 +52,57 @@ MergeTreeReadPool::MergeTreeReadPool(
     , parts_ranges(std::move(parts_))
     , predict_block_size_bytes(context_->getSettingsRef().preferred_block_size_bytes > 0)
     , do_not_steal_tasks(do_not_steal_tasks_)
+    , use_const_size_tasks(context_->getSettingsRef().merge_tree_use_const_size_tasks)
     , backoff_settings{context_->getSettingsRef()}
     , backoff_state{threads_}
 {
+    const auto & settings = context_->getSettingsRef();
+    if (prewhere_info && settings.merge_tree_use_prewhere_columns_to_determine_task_size)
+        LOG_DEBUG(
+            &Poco::Logger::get("debug"),
+            "prewhere_info->prewhere_column_name={}, prewhere_info->prewhere_actions->getRequiredColumnsNames()={}",
+            prewhere_info->prewhere_column_name,
+            fmt::join(prewhere_info->prewhere_actions->getRequiredColumnsNames(), ", "));
+
+    if (!parts_ranges.empty())
+    {
+        size_t total_compressed_bytes = 0;
+        size_t total_marks = 0;
+        /* size_t total_columns = 0; */
+        for (const auto & part : parts_ranges)
+        {
+            if (prewhere_info && settings.merge_tree_use_prewhere_columns_to_determine_task_size)
+            {
+                total_compressed_bytes
+                    += getApproxSizeOfGranule(*part.data_part, prewhere_info->prewhere_actions->getRequiredColumnsNames());
+                /* total_columns = prewhere_info->prewhere_actions->getRequiredColumnsNames().size(); */
+            }
+            else
+            {
+                total_compressed_bytes += getApproxSizeOfGranule(*part.data_part, column_names_);
+                /* total_columns = column_names_.size(); */
+            }
+            total_marks += part.getMarksCount();
+        }
+
+        if (total_marks && threads_ && (total_compressed_bytes / total_marks))
+        {
+            const auto min_bytes_per_task = settings.merge_tree_min_bytes_per_task_for_remote_reading;
+            const auto avg_mark_bytes = total_compressed_bytes / total_marks;
+            const auto heuristic_min_marks = std::min(total_marks / threads_, min_bytes_per_task / avg_mark_bytes);
+            if (heuristic_min_marks > min_marks_for_concurrent_read)
+            {
+                min_marks_for_concurrent_read = heuristic_min_marks;
+                LOG_DEBUG(
+                    &Poco::Logger::get("debug"),
+                    "total_compressed_bytes={}, total_marks={}, new min_marks_for_concurrent_read={}",
+                    total_compressed_bytes,
+                    total_marks,
+                    min_marks_for_concurrent_read);
+            }
+        }
+    }
+
     /// parts don't contain duplicate MergeTreeDataPart's.
     const auto per_part_sum_marks = fillPerPartInfo(
         parts_ranges, storage_snapshot, is_part_on_remote_disk,
@@ -167,7 +223,7 @@ MergeTreeReadTaskPtr MergeTreeReadPool::getTask(size_t thread)
     auto & marks_in_part = thread_tasks.sum_marks_in_parts.back();
 
     size_t need_marks;
-    if (is_part_on_remote_disk[part_idx]) /// For better performance with remote disks
+    if (is_part_on_remote_disk[part_idx] && !use_const_size_tasks) /// For better performance with remote disks
         need_marks = std::max(marks_in_part / 2, min_marks_for_concurrent_read);
     else /// Get whole part to read if it is small enough.
         need_marks = std::min(marks_in_part, min_marks_for_concurrent_read);
