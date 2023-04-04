@@ -415,13 +415,17 @@ void FileCache::fillHolesWithEmptyFileSegments(
 FileSegmentsHolder FileCache::getOrSet(const Key & key, size_t offset, size_t size, const CreateFileSegmentSettings & settings)
 {
     std::lock_guard cache_lock(mutex);
+
     assertInitialized(cache_lock);
+
 #ifndef NDEBUG
     assertCacheCorrectness(key, cache_lock);
 #endif
+
     FileSegment::Range range(offset, offset + size - 1);
     /// Get all segments which intersect with the given range.
     auto file_segments = getImpl(key, range, cache_lock);
+
     if (file_segments.empty())
     {
         file_segments = splitRangeIntoCells(key, offset, size, FileSegment::State::EMPTY, settings, cache_lock);

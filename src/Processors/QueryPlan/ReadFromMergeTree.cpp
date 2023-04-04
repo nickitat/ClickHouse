@@ -991,16 +991,9 @@ Pipe ReadFromMergeTree::spreadMarkRangesAmongStreamsFinal(
 
             if (num_streams > 1 && metadata_for_reading->hasPrimaryKey())
             {
-                LOG_INFO(
-                    &Poco::Logger::get("buildPipesForReadingByPKRanges"),
-                    "Initial ranges to read: {}",
-                    new_parts.getDescriptions().describe());
-
                 // Let's split parts into layers to ensure data parallelism of FINAL.
                 auto reading_step_getter = [this, &column_names, &info](auto parts)
                 {
-                    LOG_INFO(&Poco::Logger::get("reading_step_getter"), "Ranges to read: {}", parts.getDescriptions().describe());
-
                     return this->read(
                         std::move(parts),
                         column_names,

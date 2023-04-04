@@ -60,7 +60,9 @@ struct CreateFileSegmentSettings
 
     CreateFileSegmentSettings() = default;
 
-    explicit CreateFileSegmentSettings(FileSegmentKind kind_, bool unbounded_ = false) : kind(kind_), unbounded(unbounded_) { }
+    explicit CreateFileSegmentSettings(FileSegmentKind kind_, bool unbounded_ = false)
+        : kind(kind_), unbounded(unbounded_)
+    {}
 };
 
 class FileSegment : private boost::noncopyable, public std::enable_shared_from_this<FileSegment>

@@ -1,9 +1,6 @@
 #include <IO/ReadBufferFromIStream.h>
 #include <Common/Exception.h>
 
-#include <Poco/Logger.h>
-#include <Common/logger_useful.h>
-
 
 namespace DB
 {
@@ -17,8 +14,6 @@ bool ReadBufferFromIStream::nextImpl()
 {
     istr.read(internal_buffer.begin(), internal_buffer.size());
     size_t gcount = istr.gcount();
-
-    /* LOG_INFO(&Poco::Logger::get("debug"), "internal_buffer.size()={}", internal_buffer.size()); */
 
     if (!gcount)
     {
