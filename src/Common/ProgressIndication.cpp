@@ -92,7 +92,7 @@ void ProgressIndication::writeFinalProgress()
         return;
 
     std::cout << "Processed " << formatReadableQuantity(progress.read_rows) << " rows, "
-                << formatReadableSizeWithDecimalSuffix(progress.read_bytes);
+              << formatReadableSizeWithDecimalSuffix(progress.read_bytes) << " uncompressed data";
 
     UInt64 elapsed_ns = getElapsedNanoseconds();
     if (elapsed_ns)
@@ -133,9 +133,8 @@ void ProgressIndication::writeProgress(WriteBufferFromFileDescriptor & message)
     size_t prefix_size = message.count();
 
     message << indicator << " Progress: ";
-    message
-        << formatReadableQuantity(progress.read_rows) << " rows, "
-        << formatReadableSizeWithDecimalSuffix(progress.read_bytes);
+    message << formatReadableQuantity(progress.read_rows) << " rows, " << formatReadableSizeWithDecimalSuffix(progress.read_bytes)
+            << " uncompressed data";
 
     UInt64 elapsed_ns = getElapsedNanoseconds();
     if (elapsed_ns)
