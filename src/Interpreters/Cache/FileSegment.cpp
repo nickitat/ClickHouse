@@ -1,6 +1,5 @@
 #include "FileSegment.h"
 
-#include <filesystem>
 #include <IO/Operators.h>
 #include <IO/WriteBufferFromString.h>
 #include <Interpreters/Cache/FileCache.h>
@@ -12,8 +11,6 @@
 #include <Common/ElapsedTimeProfileEventIncrement.h>
 
 #include <magic_enum.hpp>
-
-namespace fs = std::filesystem;
 
 namespace ProfileEvents
 {
@@ -76,7 +73,7 @@ FileSegment::FileSegment(
         case (State::DOWNLOADED):
         {
             reserved_size = downloaded_size = size_;
-            chassert(fs::file_size(getPathInLocalCache()) == size_);
+            chassert(cache->getDisk()->getFileSize(getPathInLocalCache()) == size_);
             chassert(queue_iterator);
             chassert(key_metadata.lock());
             break;
@@ -396,7 +393,7 @@ void FileSegment::write(const char * from, size_t size, size_t offset)
         int code = e.getErrno();
         if (code == /* No space left on device */28 || code == /* Quota exceeded */122)
         {
-            const auto file_size = fs::file_size(file_segment_path);
+            const auto file_size = cache->getDisk()->getFileSize(file_segment_path);
             chassert(downloaded_size <= file_size);
             chassert(reserved_size >= file_size);
             chassert(file_size <= range().size());
@@ -546,7 +543,7 @@ void FileSegment::setDownloadedUnlocked(const FileSegmentGuard::Lock &)
     }
 
     chassert(downloaded_size > 0);
-    chassert(fs::file_size(getPathInLocalCache()) == downloaded_size);
+    chassert(cache->getDisk()->getFileSize(getPathInLocalCache()) == downloaded_size);
 }
 
 void FileSegment::setDownloadFailedUnlocked(const FileSegmentGuard::Lock & lock)
@@ -640,7 +637,7 @@ void FileSegment::complete()
         case State::DOWNLOADED:
         {
             chassert(current_downloaded_size == range().size());
-            chassert(current_downloaded_size == fs::file_size(getPathInLocalCache()));
+            chassert(current_downloaded_size == cache->getDisk()->getFileSize(getPathInLocalCache()));
             chassert(!cache_writer);
             chassert(!remote_file_reader);
             break;

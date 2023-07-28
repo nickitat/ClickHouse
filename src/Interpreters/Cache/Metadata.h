@@ -1,10 +1,11 @@
 #pragma once
-#include <boost/noncopyable.hpp>
+#include <Disks/IDisk.h>
+#include <Interpreters/Cache/FileCacheKey.h>
+#include <Interpreters/Cache/FileCache_fwd_internal.h>
+#include <Interpreters/Cache/FileSegment.h>
 #include <Interpreters/Cache/Guards.h>
 #include <Interpreters/Cache/IFileCachePriority.h>
-#include <Interpreters/Cache/FileCacheKey.h>
-#include <Interpreters/Cache/FileSegment.h>
-#include <Interpreters/Cache/FileCache_fwd_internal.h>
+#include <boost/noncopyable.hpp>
 
 namespace DB
 {
@@ -76,6 +77,7 @@ private:
     KeyGuard guard;
     CleanupQueue & cleanup_queue;
     DownloadQueue & download_queue;
+    DiskPtr disk;
     std::atomic<bool> created_base_directory = false;
     Poco::Logger * log;
 };
