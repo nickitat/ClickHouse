@@ -60,17 +60,19 @@ KeyMetadata::KeyMetadata(
     const std::string & key_path_,
     CleanupQueue & cleanup_queue_,
     DownloadQueue & download_queue_,
+    DiskPtr disk_,
     Poco::Logger * log_,
     bool created_base_directory_)
     : key(key_)
     , key_path(key_path_)
     , cleanup_queue(cleanup_queue_)
     , download_queue(download_queue_)
+    , disk(std::move(disk_))
     , created_base_directory(created_base_directory_)
     , log(log_)
 {
     if (created_base_directory)
-        chassert(fs::exists(key_path));
+        chassert(disk->exists(key_path));
 }
 
 LockedKeyPtr KeyMetadata::lock()
@@ -88,7 +90,7 @@ LockedKeyPtr KeyMetadata::tryLock()
 {
     ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::FilesystemCacheLockKeyMicroseconds);
 
-    auto locked = std::make_unique<LockedKey>(shared_from_this());
+    auto locked = std::make_unique<LockedKey>(shared_from_this(), disk);
     if (key_state == KeyMetadata::KeyState::ACTIVE)
         return locked;
 
@@ -101,7 +103,7 @@ bool KeyMetadata::createBaseDirectory()
     {
         try
         {
-            fs::create_directories(key_path);
+            disk->createDirectories(key_path);
         }
         catch (...)
         {
@@ -118,8 +120,7 @@ bool KeyMetadata::createBaseDirectory()
 
 std::string KeyMetadata::getFileSegmentPath(const FileSegment & file_segment)
 {
-    return fs::path(key_path)
-        / CacheMetadata::getFileNameForFileSegment(file_segment.offset(), file_segment.getKind());
+    return fs::path(key_path) / CacheMetadata::getFileNameForFileSegment(file_segment.offset(), file_segment.getKind());
 }
 
 
@@ -139,10 +140,11 @@ private:
 };
 
 
-CacheMetadata::CacheMetadata(const std::string & path_)
+CacheMetadata::CacheMetadata(const std::string & path_, DiskPtr disk_)
     : path(path_)
     , cleanup_queue(std::make_unique<CleanupQueue>())
     , download_queue(std::make_unique<DownloadQueue>())
+    , disk(std::move(disk_))
     , log(&Poco::Logger::get("CacheMetadata"))
 {
 }
@@ -197,7 +199,7 @@ LockedKeyPtr CacheMetadata::lockKeyMetadata(
 
             it = emplace(
                 key, std::make_shared<KeyMetadata>(
-                    key, getPathForKey(key), *cleanup_queue, *download_queue, log, is_initial_load)).first;
+                    key, getPathForKey(key), *cleanup_queue, *download_queue, disk, log, is_initial_load)).first;
         }
 
         key_metadata = it->second;
@@ -207,7 +209,7 @@ LockedKeyPtr CacheMetadata::lockKeyMetadata(
         LockedKeyPtr locked_metadata;
         {
             ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::FilesystemCacheLockKeyMicroseconds);
-            locked_metadata = std::make_unique<LockedKey>(key_metadata);
+            locked_metadata = std::make_unique<LockedKey>(key_metadata, disk);
         }
 
         const auto key_state = locked_metadata->getKeyState();
@@ -245,7 +247,7 @@ void CacheMetadata::iterate(IterateCacheMetadataFunc && func)
         LockedKeyPtr locked_key;
         {
             ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::FilesystemCacheLockKeyMicroseconds);
-            locked_key = std::make_unique<LockedKey>(key_metadata);
+            locked_key = std::make_unique<LockedKey>(key_metadata, disk);
         }
 
         const auto key_state = locked_key->getKeyState();
@@ -278,7 +280,7 @@ void CacheMetadata::doCleanup()
         LockedKeyPtr locked_metadata;
         {
             ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::FilesystemCacheLockKeyMicroseconds);
-            locked_metadata = std::make_unique<LockedKey>(it->second);
+            locked_metadata = std::make_unique<LockedKey>(it->second, disk);
         }
 
         const auto key_state = locked_metadata->getKeyState();
@@ -298,8 +300,8 @@ void CacheMetadata::doCleanup()
 
         try
         {
-            if (fs::exists(key_directory))
-                fs::remove_all(key_directory);
+            if (disk->exists(key_directory))
+                disk->removeRecursive(key_directory);
         }
         catch (...)
         {
@@ -310,8 +312,8 @@ void CacheMetadata::doCleanup()
 
         try
         {
-            if (fs::exists(key_prefix_directory) && fs::is_empty(key_prefix_directory))
-                fs::remove(key_prefix_directory);
+            if (disk->exists(key_prefix_directory) && disk->isDirectoryEmpty(key_prefix_directory))
+                disk->removeDirectory(key_prefix_directory);
         }
         catch (const fs::filesystem_error & e)
         {
@@ -525,9 +527,8 @@ void CacheMetadata::cancelDownload()
     download_queue->cancel();
 }
 
-LockedKey::LockedKey(std::shared_ptr<KeyMetadata> key_metadata_)
-    : key_metadata(key_metadata_)
-    , lock(key_metadata->guard.lock())
+LockedKey::LockedKey(std::shared_ptr<KeyMetadata> key_metadata_, DiskPtr disk_)
+    : key_metadata(key_metadata_), lock(key_metadata->guard.lock()), disk(std::move(disk_))
 {
 }
 
@@ -606,10 +607,11 @@ KeyMetadata::iterator LockedKey::removeFileSegment(size_t offset, const FileSegm
     file_segment->detach(segment_lock, *this);
 
     const auto path = key_metadata->getFileSegmentPath(*file_segment);
-    bool exists = fs::exists(path);
+    LOG_DEBUG(&Poco::Logger::get("debug"), "removeFileSegment path={}, key_path={}", path, key_metadata->key_path);
+    bool exists = disk->exists(path);
     if (exists)
     {
-        fs::remove(path);
+        disk->removeFile(path);
 
         /// Clear OpenedFileCache to avoid reading from incorrect file descriptor.
         int flags = file_segment->getFlagsForLocalRead();

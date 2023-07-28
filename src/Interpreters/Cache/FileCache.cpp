@@ -14,10 +14,6 @@
 #include <Common/ThreadPool.h>
 #include <Common/ElapsedTimeProfileEventIncrement.h>
 
-#include <filesystem>
-
-
-namespace fs = std::filesystem;
 
 namespace ProfileEvents
 {
@@ -51,14 +47,15 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-FileCache::FileCache(const FileCacheSettings & settings)
+FileCache::FileCache(const FileCacheSettings & settings, DiskPtr storage)
     : max_file_segment_size(settings.max_file_segment_size)
     , bypass_cache_threshold(settings.enable_bypass_cache_with_threashold ? settings.bypass_cache_threashold : 0)
     , delayed_cleanup_interval_ms(settings.delayed_cleanup_interval_ms)
     , boundary_alignment(settings.boundary_alignment)
     , background_download_threads(settings.background_download_threads)
+    , disk(std::move(storage))
     , log(&Poco::Logger::get("FileCache"))
-    , metadata(settings.base_path)
+    , metadata(settings.base_path, disk)
 {
     main_priority = std::make_unique<LRUFileCachePriority>(settings.max_size, settings.max_elements);
 
@@ -113,13 +110,13 @@ void FileCache::initialize()
 
     try
     {
-        if (fs::exists(getBasePath()))
+        if (disk->isDirectory(getBasePath()))
         {
             loadMetadata();
         }
         else
         {
-            fs::create_directories(getBasePath());
+            disk->createDirectories(getBasePath());
         }
     }
     catch (...)
@@ -185,8 +182,8 @@ FileSegments FileCache::getImpl(const LockedKey & locked_key, const FileSegment:
                 * expensive compared to overall query execution time.
                 */
 
-                fs::path path = file_segment->getPathInLocalCache();
-                if (!fs::exists(path))
+                auto path = file_segment->getPathInLocalCache();
+                if (!disk->exists(path))
                 {
                     throw Exception(
                         ErrorCodes::LOGICAL_ERROR,
@@ -194,7 +191,7 @@ FileSegments FileCache::getImpl(const LockedKey & locked_key, const FileSegment:
                         file_segment->getInfoForLog());
                 }
 
-                if (fs::file_size(path) == 0)
+                if (disk->getFileSize(path) == 0)
                 {
                     throw Exception(
                         ErrorCodes::LOGICAL_ERROR,
@@ -870,35 +867,32 @@ void FileCache::loadMetadata()
     }
 
     size_t total_size = 0;
-    for (auto key_prefix_it = fs::directory_iterator{metadata.getBaseDirectory()}; key_prefix_it != fs::directory_iterator();
-         key_prefix_it++)
+    for (auto key_prefix_it = disk->iterateDirectory(metadata.getBaseDirectory()); key_prefix_it->isValid(); key_prefix_it->next())
     {
-        const fs::path key_prefix_directory = key_prefix_it->path();
+        const fs::path key_prefix_directory = fs::path(metadata.getBaseDirectory()) / key_prefix_it->path();
 
-        if (!key_prefix_it->is_directory())
+        if (!disk->isDirectory(key_prefix_directory))
         {
             if (key_prefix_directory.filename() != "status")
             {
-                LOG_WARNING(
-                    log, "Unexpected file {} (not a directory), will skip it",
-                    key_prefix_directory.string());
+                LOG_WARNING(log, "Unexpected file {} (not a directory), will skip it", key_prefix_directory.string());
             }
             continue;
         }
 
-        fs::directory_iterator key_it{key_prefix_directory};
-        if (key_it == fs::directory_iterator{})
+        auto key_it = disk->iterateDirectory(key_prefix_directory);
+        if (!key_it->isValid())
         {
             LOG_DEBUG(log, "Removing empty key prefix directory: {}", key_prefix_directory.string());
-            fs::remove(key_prefix_directory);
+            disk->removeDirectory(key_prefix_directory);
             continue;
         }
 
-        for (/* key_it already initialized to verify emptiness */; key_it != fs::directory_iterator(); key_it++)
+        for (/* key_it already initialized to verify emptiness */; key_it->isValid(); key_it->next())
         {
-            const fs::path key_directory = key_it->path();
+            const fs::path key_directory = key_prefix_directory / key_it->path();
 
-            if (!key_it->is_directory())
+            if (!disk->isDirectory(key_directory))
             {
                 LOG_DEBUG(
                     log,
@@ -907,19 +901,20 @@ void FileCache::loadMetadata()
                 continue;
             }
 
-            if (fs::directory_iterator{key_directory} == fs::directory_iterator{})
+            if (disk->isDirectoryEmpty(key_directory))
             {
                 LOG_DEBUG(log, "Removing empty key directory: {}", key_directory.string());
-                fs::remove(key_directory);
+                disk->removeDirectory(key_directory);
                 continue;
             }
 
             const auto key = Key(unhexUInt<UInt128>(key_directory.filename().string().data()));
             auto locked_key = metadata.lockKeyMetadata(key, CacheMetadata::KeyNotFoundPolicy::CREATE_EMPTY, /* is_initial_load */true);
 
-            for (fs::directory_iterator offset_it{key_directory}; offset_it != fs::directory_iterator(); ++offset_it)
+            for (auto offset_it = disk->iterateDirectory(key_directory); offset_it->isValid(); offset_it->next())
             {
-                auto offset_with_suffix = offset_it->path().filename().string();
+                const fs::path offset_path = key_directory / offset_it->path();
+                auto offset_with_suffix = offset_it->name();
                 auto delim_pos = offset_with_suffix.find('_');
                 bool parsed;
                 FileSegmentKind segment_kind = FileSegmentKind::Regular;
@@ -932,26 +927,26 @@ void FileCache::loadMetadata()
                     if (offset_with_suffix.substr(delim_pos+1) == "persistent")
                     {
                         /// For compatibility. Persistent files are no longer supported.
-                        fs::remove(offset_it->path());
+                        disk->removeFile(offset_path);
                         continue;
                     }
                     if (offset_with_suffix.substr(delim_pos+1) == "temporary")
                     {
-                        fs::remove(offset_it->path());
+                        disk->removeFile(offset_path);
                         continue;
                     }
                 }
 
                 if (!parsed)
                 {
-                    LOG_WARNING(log, "Unexpected file: {}", offset_it->path().string());
+                    LOG_WARNING(log, "Unexpected file: {}", offset_it->name());
                     continue; /// Or just remove? Some unexpected file.
                 }
 
-                size = offset_it->file_size();
+                size = disk->getFileSize(offset_path);
                 if (!size)
                 {
-                    fs::remove(offset_it->path());
+                    disk->removeFile(offset_path);
                     continue;
                 }
 
@@ -969,7 +964,7 @@ void FileCache::loadMetadata()
                         tryLogCurrentException(__PRETTY_FUNCTION__);
                         chassert(false);
 
-                        fs::remove(offset_it->path());
+                        disk->removeFile(offset_path);
                         continue;
                     }
 
@@ -989,7 +984,7 @@ void FileCache::loadMetadata()
                         "cached file `{}` does not fit in cache anymore (size: {})",
                         main_priority->getSizeLimit(), main_priority->getSize(lock), key_directory.string(), size);
 
-                    fs::remove(offset_it->path());
+                    disk->removeFile(offset_path);
                 }
             }
         }

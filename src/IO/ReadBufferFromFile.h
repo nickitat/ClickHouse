@@ -4,6 +4,8 @@
 #include <IO/OpenedFileCache.h>
 #include <Common/CurrentMetrics.h>
 
+#include <Poco/Logger.h>
+#include <Common/logger_useful.h>
 
 namespace CurrentMetrics
 {

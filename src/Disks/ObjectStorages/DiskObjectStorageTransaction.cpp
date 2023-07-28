@@ -633,8 +633,9 @@ std::unique_ptr<WriteBufferFromFileBase> DiskObjectStorageTransaction::writeFile
 
     if (autocommit)
     {
-        create_metadata_callback = [tx = shared_from_this(), mode, path, blob_name] (size_t count)
+        create_metadata_callback = [tx = shared_from_this(), mode, path, blob_name](size_t count)
         {
+            LOG_DEBUG(&Poco::Logger::get("debug"), "create_metadata_callback is called");
             if (mode == WriteMode::Rewrite)
                 tx->metadata_transaction->createMetadataFile(path, blob_name, count);
             else

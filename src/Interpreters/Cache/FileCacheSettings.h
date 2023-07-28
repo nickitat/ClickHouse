@@ -12,6 +12,7 @@ namespace DB
 struct FileCacheSettings
 {
     std::string base_path;
+    std::string external_disk_name;
 
     size_t max_size = 0;
     size_t max_elements = FILECACHE_DEFAULT_MAX_ELEMENTS;

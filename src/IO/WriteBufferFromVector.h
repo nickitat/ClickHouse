@@ -66,7 +66,7 @@ public:
         finalize();
     }
 
-private:
+protected:
     void finalizeImpl() override
     {
         vector.resize(
@@ -94,6 +94,7 @@ private:
         working_buffer = internal_buffer;
     }
 
+private:
     VectorType & vector;
 
     static constexpr size_t initial_size = 32;

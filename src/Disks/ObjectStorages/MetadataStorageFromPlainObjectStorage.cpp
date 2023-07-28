@@ -54,6 +54,7 @@ bool MetadataStorageFromPlainObjectStorage::isDirectory(const std::string & path
 
     RelativePathsWithMetadata files;
     object_storage->listObjects(directory, files, 1);
+    LOG_DEBUG(&Poco::Logger::get("debug"), "directory={}, files.front().relative_path={}", directory, files.size());
     return !files.empty();
 }
 

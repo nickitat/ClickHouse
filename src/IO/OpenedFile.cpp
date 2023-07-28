@@ -1,10 +1,14 @@
+#include <filesystem>
 #include <mutex>
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #include <Common/ProfileEvents.h>
 #include <Common/Exception.h>
 #include <IO/OpenedFile.h>
+
+#include <Poco/Logger.h>
+#include <Common/logger_useful.h>
 
 
 namespace ProfileEvents

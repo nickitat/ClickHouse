@@ -49,9 +49,7 @@ public:
         Clients(std::shared_ptr<S3::Client> client, const S3ObjectStorageSettings & settings);
     };
 
-private:
-    friend class S3PlainObjectStorage;
-
+protected:
     S3ObjectStorage(
         const char * logger_name,
         std::unique_ptr<S3::Client> && client_,
@@ -181,6 +179,8 @@ private:
     const String version_id;
 
     Poco::Logger * log;
+
+protected:
     DataSourceDescription data_source_description;
 };
 
@@ -194,9 +194,8 @@ public:
     std::string generateBlobNameForPath(const std::string & path) override { return path; }
     std::string getName() const override { return "S3PlainObjectStorage"; }
 
-    template <class ...Args>
-    explicit S3PlainObjectStorage(Args && ...args)
-        : S3ObjectStorage("S3PlainObjectStorage", std::forward<Args>(args)...)
+    template <class... Args>
+    explicit S3PlainObjectStorage(Args &&... args) : S3ObjectStorage("S3PlainObjectStorage", std::forward<Args>(args)...)
     {
         data_source_description.type = DataSourceType::S3_Plain;
     }
@@ -207,6 +206,55 @@ public:
     bool isWriteOnce() const override { return true; }
 };
 
+class S3PlainObjectStorageForCache : public S3PlainObjectStorage
+{
+public:
+    ~S3PlainObjectStorageForCache() override;
+
+    std::string getName() const override { return "S3PlainObjectStorageForCache"; }
+
+    template <class... Args>
+    explicit S3PlainObjectStorageForCache(Args &&... args)
+        : S3PlainObjectStorage(std::forward<Args>(args)...), in_flight_buffers(std::make_shared<InFlightBuffers>())
+    {
+        data_source_description.type = DataSourceType::S3_PlainForCache;
+    }
+
+    std::unique_ptr<ReadBufferFromFileBase> readObject( /// NOLINT
+        const StoredObject &,
+        const ReadSettings &,
+        std::optional<size_t>,
+        std::optional<size_t>) const override
+    {
+        throw Exception(ErrorCodes::NOT_IMPLEMENTED, "Not supposed to be called ever");
+    }
+
+    std::unique_ptr<ReadBufferFromFileBase> readObjects( /// NOLINT
+        const StoredObjects & objects,
+        const ReadSettings & read_settings = ReadSettings{},
+        std::optional<size_t> read_hint = {},
+        std::optional<size_t> file_size = {}) const override;
+
+    std::unique_ptr<WriteBufferFromFileBase> writeObject( /// NOLINT
+        const StoredObject & object,
+        WriteMode mode,
+        std::optional<ObjectAttributes> attributes = {},
+        size_t buf_size = DBMS_DEFAULT_BUFFER_SIZE,
+        const WriteSettings & write_settings = {}) override;
+
+private:
+    using Base = S3PlainObjectStorage;
+
+    class SuperWriteBufferFromFile;
+
+    struct InFlightBuffers
+    {
+        mutable std::mutex m;
+        std::unordered_map<std::string, std::weak_ptr<SuperWriteBufferFromFile>> map;
+    };
+
+    std::shared_ptr<InFlightBuffers> in_flight_buffers;
+};
 }
 
 #endif

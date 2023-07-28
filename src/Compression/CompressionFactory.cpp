@@ -103,7 +103,7 @@ CompressionCodecPtr CompressionCodecFactory::get(uint8_t byte_code) const
     const auto family_code_and_creator = family_code_with_codec.find(byte_code);
 
     if (family_code_and_creator == family_code_with_codec.end())
-        throw Exception(ErrorCodes::UNKNOWN_CODEC, "Unknown codec family code: {}", toString(byte_code));
+        throw Exception(ErrorCodes::UNKNOWN_CODEC, "{} Unknown codec family code: {}", CurrentThread::get().thread_id, toString(byte_code));
 
     return family_code_and_creator->second({}, nullptr);
 }

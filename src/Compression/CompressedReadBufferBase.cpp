@@ -16,6 +16,9 @@
 #include <IO/WriteHelpers.h>
 #include <IO/Operators.h>
 
+#include <Poco/Logger.h>
+#include <Common/logger_useful.h>
+
 
 namespace ProfileEvents
 {

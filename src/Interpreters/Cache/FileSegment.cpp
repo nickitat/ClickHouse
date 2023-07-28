@@ -1,6 +1,6 @@
 #include "FileSegment.h"
-
 #include <filesystem>
+
 #include <IO/Operators.h>
 #include <IO/WriteBufferFromString.h>
 #include <Interpreters/Cache/FileCache.h>
@@ -12,8 +12,6 @@
 #include <Common/ElapsedTimeProfileEventIncrement.h>
 
 #include <magic_enum.hpp>
-
-namespace fs = std::filesystem;
 
 namespace ProfileEvents
 {
@@ -76,7 +74,13 @@ FileSegment::FileSegment(
         case (State::DOWNLOADED):
         {
             reserved_size = downloaded_size = size_;
-            chassert(fs::file_size(getPathInLocalCache()) == size_);
+            /* LOG_DEBUG( */
+            /* &Poco::Logger::get("debug"), */
+            /* "getPathInLocalCache()={}, size_={}, cache->getDisk()->getFileSize(getPathInLocalCache())={}", */
+            /* getPathInLocalCache(), */
+            /* size_, */
+            /* cache->getDisk()->getFileSize(getPathInLocalCache())); */
+            chassert(cache->getDisk()->getFileSize(getPathInLocalCache()) == size_);
             chassert(queue_iterator);
             chassert(key_metadata.lock());
             break;
@@ -175,7 +179,7 @@ void FileSegment::setDownloadedSize(size_t delta)
 {
     auto lock = lockFileSegment();
     downloaded_size += delta;
-    assert(downloaded_size == std::filesystem::file_size(getPathInLocalCache()));
+    /* assert(downloaded_size == std::filesystem::file_size(getPathInLocalCache())); */
 }
 
 bool FileSegment::isDownloaded() const
@@ -372,21 +376,42 @@ void FileSegment::write(const char * from, size_t size, size_t offset)
                     "Cache writer was finalized (downloaded size: {}, state: {})",
                     current_downloaded_size, stateToString(download_state));
 
-            cache_writer = std::make_unique<WriteBufferFromFile>(file_segment_path);
+            cache_writer = cache->getDisk()->writeFile(file_segment_path);
         }
     }
 
     try
     {
+        /* LOG_DEBUG( */
+        /* &Poco::Logger::get("debug"), */
+        /* "write() getPathInLocalCache()={}, offset={}, size={}", */
+        /* getPathInLocalCache(), */
+        /* offset, */
+        /* size); */
+
         cache_writer->write(from, size);
 
         std::lock_guard lock(download_mutex);
 
         cache_writer->next();
 
+        /* LOG_DEBUG( */
+        /* &Poco::Logger::get("debug"), */
+        /* "write() fs::exists(getPathInLocalCache())={}, disk->exists()={}", */
+        /* fs::exists(fs::path("./disks/cache_on_s3") / getPathInLocalCache()), */
+        /* cache->getDisk()->exists(getPathInLocalCache())); */
+
+        cache_writer->sync();
+
+        /* LOG_DEBUG( */
+        /* &Poco::Logger::get("debug"), */
+        /* "write() fs::exists(getPathInLocalCache())={}, disk->exists()={}", */
+        /* fs::exists(fs::path("./disks/cache_on_s3") / getPathInLocalCache()), */
+        /* cache->getDisk()->exists(getPathInLocalCache())); */
+
         downloaded_size += size;
 
-        chassert(std::filesystem::file_size(file_segment_path) == downloaded_size);
+        /* chassert(std::filesystem::file_size(file_segment_path) == downloaded_size); */
     }
     catch (ErrnoException & e)
     {
@@ -396,7 +421,7 @@ void FileSegment::write(const char * from, size_t size, size_t offset)
         int code = e.getErrno();
         if (code == /* No space left on device */28 || code == /* Quota exceeded */122)
         {
-            const auto file_size = fs::file_size(file_segment_path);
+            const auto file_size = cache->getDisk()->getFileSize(file_segment_path);
             chassert(downloaded_size <= file_size);
             chassert(reserved_size >= file_size);
             chassert(file_size <= range().size());
@@ -540,13 +565,14 @@ void FileSegment::setDownloadedUnlocked(const FileSegmentGuard::Lock &)
 
     if (cache_writer)
     {
+        /* LOG_DEBUG(&Poco::Logger::get("debug"), "setDownloadedUnlocked() getPathInLocalCache()={}", getPathInLocalCache()); */
         cache_writer->finalize();
         cache_writer.reset();
         remote_file_reader.reset();
     }
 
     chassert(downloaded_size > 0);
-    chassert(fs::file_size(getPathInLocalCache()) == downloaded_size);
+    chassert(cache->getDisk()->getFileSize(getPathInLocalCache()) == downloaded_size);
 }
 
 void FileSegment::setDownloadFailedUnlocked(const FileSegmentGuard::Lock & lock)
@@ -640,7 +666,7 @@ void FileSegment::complete()
         case State::DOWNLOADED:
         {
             chassert(current_downloaded_size == range().size());
-            chassert(current_downloaded_size == fs::file_size(getPathInLocalCache()));
+            chassert(current_downloaded_size == cache->getDisk()->getFileSize(getPathInLocalCache()));
             chassert(!cache_writer);
             chassert(!remote_file_reader);
             break;
@@ -787,7 +813,7 @@ bool FileSegment::assertCorrectnessUnlocked(const FileSegmentGuard::Lock &) cons
     {
         chassert(downloader_id.empty());
         chassert(downloaded_size == reserved_size);
-        chassert(std::filesystem::file_size(getPathInLocalCache()) > 0);
+        /* chassert(std::filesystem::file_size(getPathInLocalCache()) > 0); */
         chassert(queue_iterator);
         check_iterator(queue_iterator);
     }

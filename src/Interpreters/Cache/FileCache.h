@@ -19,7 +19,8 @@
 #include <Interpreters/Cache/Metadata.h>
 #include <Interpreters/Cache/QueryLimit.h>
 #include <Interpreters/Cache/FileCache_fwd_internal.h>
-#include <filesystem>
+
+#include <Disks/IDisk.h>
 
 
 namespace DB
@@ -42,7 +43,7 @@ public:
     using PriorityIterator = IFileCachePriority::Iterator;
     using PriorityIterationResult = IFileCachePriority::IterationResult;
 
-    explicit FileCache(const FileCacheSettings & settings);
+    explicit FileCache(const FileCacheSettings & settings, DiskPtr storage);
 
     ~FileCache();
 
@@ -130,6 +131,8 @@ public:
 
     CacheGuard::Lock lockCache() const;
 
+    DiskPtr getDisk() const { return disk; }
+
 private:
     using KeyAndOffset = FileCacheKeyAndOffset;
 
@@ -138,6 +141,8 @@ private:
     const size_t delayed_cleanup_interval_ms;
     const size_t boundary_alignment;
     const size_t background_download_threads;
+
+    std::shared_ptr<IDisk> disk;
 
     Poco::Logger * log;
 
