@@ -46,10 +46,11 @@ struct KeyMetadata : public std::map<size_t, FileSegmentMetadataPtr>,
     using Key = FileCacheKey;
 
     KeyMetadata(
+        const std::string & path_,
         const Key & key_,
-        const std::string & key_path_,
         CleanupQueue & cleanup_queue_,
         DownloadQueue & download_queue_,
+        DiskPtr disk_,
         Poco::Logger * log_,
         bool created_base_directory_ = false);
 
@@ -61,7 +62,7 @@ struct KeyMetadata : public std::map<size_t, FileSegmentMetadataPtr>,
     };
 
     const Key key;
-    const std::string key_path;
+    const std::string path;
 
     LockedKeyPtr lock();
 
@@ -91,7 +92,7 @@ public:
     using Key = FileCacheKey;
     using IterateCacheMetadataFunc = std::function<void(const LockedKey &)>;
 
-    explicit CacheMetadata(const std::string & path_);
+    explicit CacheMetadata(const std::string & path_, DiskPtr disk_);
 
     const String & getBaseDirectory() const { return path; }
 
@@ -129,6 +130,7 @@ private:
     mutable CacheMetadataGuard guard;
     const CleanupQueuePtr cleanup_queue;
     const DownloadQueuePtr download_queue;
+    DiskPtr disk;
     Poco::Logger * log;
 
     void downloadImpl(FileSegment & file_segment, std::optional<Memory<>> & memory);
@@ -151,7 +153,7 @@ struct LockedKey : private boost::noncopyable
 {
     using Key = FileCacheKey;
 
-    explicit LockedKey(std::shared_ptr<KeyMetadata> key_metadata_);
+    explicit LockedKey(std::shared_ptr<KeyMetadata> key_metadata_, DiskPtr disk_);
 
     ~LockedKey();
 
@@ -192,6 +194,7 @@ struct LockedKey : private boost::noncopyable
 private:
     const std::shared_ptr<KeyMetadata> key_metadata;
     KeyGuard::Lock lock; /// `lock` must be destructed before `key_metadata`.
+    DiskPtr disk;
 };
 
 }

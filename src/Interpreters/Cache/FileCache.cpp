@@ -56,7 +56,7 @@ FileCache::FileCache(const String & my_name, const FileCacheSettings & settings)
     , background_download_threads(settings.background_download_threads)
     , disk(std::make_shared<DiskLocal>(my_name, settings.base_path))
     , log(&Poco::Logger::get("FileCache"))
-    , metadata(settings.base_path)
+    , metadata(settings.base_path, disk)
 {
     main_priority = std::make_unique<LRUFileCachePriority>(settings.max_size, settings.max_elements);
 
