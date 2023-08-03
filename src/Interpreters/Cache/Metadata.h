@@ -46,8 +46,8 @@ struct KeyMetadata : public std::map<size_t, FileSegmentMetadataPtr>,
     using Key = FileCacheKey;
 
     KeyMetadata(
-        const std::string & path_,
         const Key & key_,
+        const std::string & key_path_,
         CleanupQueue & cleanup_queue_,
         DownloadQueue & download_queue_,
         DiskPtr disk_,
@@ -62,7 +62,7 @@ struct KeyMetadata : public std::map<size_t, FileSegmentMetadataPtr>,
     };
 
     const Key key;
-    const std::string path;
+    const std::string key_path;
 
     LockedKeyPtr lock();
 

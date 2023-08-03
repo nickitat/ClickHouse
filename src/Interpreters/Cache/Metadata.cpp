@@ -56,22 +56,21 @@ size_t FileSegmentMetadata::size() const
 }
 
 KeyMetadata::KeyMetadata(
-    const std::string & path_,
     const Key & key_,
+    const std::string & key_path_,
     CleanupQueue & cleanup_queue_,
     DownloadQueue & download_queue_,
     DiskPtr disk_,
     Poco::Logger * log_,
     bool created_base_directory_)
     : key(key_)
-    , path(path_)
+    , key_path(key_path_)
     , cleanup_queue(cleanup_queue_)
     , download_queue(download_queue_)
     , disk(std::move(disk_))
     , created_base_directory(created_base_directory_)
     , log(log_)
 {
-    const auto key_path = fs::path(key.toString().substr(0, 3)) / key.toString();
     if (created_base_directory)
         chassert(disk->exists(key_path));
 }
@@ -104,7 +103,6 @@ bool KeyMetadata::createBaseDirectory()
     {
         try
         {
-            const auto key_path = fs::path(key.toString().substr(0, 3)) / key.toString();
             disk->createDirectories(key_path);
         }
         catch (...)
@@ -122,7 +120,6 @@ bool KeyMetadata::createBaseDirectory()
 
 std::string KeyMetadata::getFileSegmentPath(const FileSegment & file_segment)
 {
-    const auto key_path = fs::path(path) / key.toString().substr(0, 3) / key.toString();
     return fs::path(key_path) / CacheMetadata::getFileNameForFileSegment(file_segment.offset(), file_segment.getKind());
 }
 
@@ -200,7 +197,9 @@ LockedKeyPtr CacheMetadata::lockKeyMetadata(
             else if (key_not_found_policy == KeyNotFoundPolicy::RETURN_NULL)
                 return nullptr;
 
-            it = emplace(key, std::make_shared<KeyMetadata>(path, key, *cleanup_queue, *download_queue, disk, log, is_initial_load)).first;
+            it = emplace(
+                key, std::make_shared<KeyMetadata>(
+                    key, getPathForKey(key), *cleanup_queue, *download_queue, disk, log, is_initial_load)).first;
         }
 
         key_metadata = it->second;
@@ -607,9 +606,7 @@ KeyMetadata::iterator LockedKey::removeFileSegment(size_t offset, const FileSegm
 
     file_segment->detach(segment_lock, *this);
 
-    const auto key = key_metadata->key;
-    const auto path = fs::path(key.toString().substr(0, 3)) / key.toString()
-        / CacheMetadata::getFileNameForFileSegment(file_segment->offset(), file_segment->getKind());
+    const auto path = key_metadata->getFileSegmentPath(*file_segment);
     bool exists = disk->exists(path);
     if (exists)
     {

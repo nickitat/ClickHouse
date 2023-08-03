@@ -369,13 +369,7 @@ void FileSegment::write(const char * from, size_t size, size_t offset)
                     "Cache writer was finalized (downloaded size: {}, state: {})",
                     current_downloaded_size, stateToString(download_state));
 
-            /* cache_writer = std::make_unique<WriteBufferFromFile>(file_segment_path); */
-            auto path = fs::path(key().toString().substr(0, 3)) / key().toString()
-                / CacheMetadata::getFileNameForFileSegment(this->offset(), this->getKind());
-
-            LOG_DEBUG(&Poco::Logger::get("debug"), "file_segment_path={}, path={}", file_segment_path, path);
-
-            cache_writer = cache->getDisk()->writeFile(path);
+            cache_writer = cache->getDisk()->writeFile(file_segment_path);
         }
     }
 

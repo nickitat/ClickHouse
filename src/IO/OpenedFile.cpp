@@ -1,10 +1,14 @@
+#include <filesystem>
 #include <mutex>
-#include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #include <Common/ProfileEvents.h>
 #include <Common/Exception.h>
 #include <IO/OpenedFile.h>
+
+#include <Poco/Logger.h>
+#include <Common/logger_useful.h>
 
 
 namespace ProfileEvents
@@ -27,6 +31,7 @@ void OpenedFile::open() const
 {
     ProfileEvents::increment(ProfileEvents::FileOpen);
 
+    LOG_DEBUG(&Poco::Logger::get("debug"), "file_name={}, exists={}", file_name, std::filesystem::exists(file_name));
     fd = ::open(file_name.c_str(), (flags == -1 ? 0 : flags) | O_RDONLY | O_CLOEXEC);
 
     if (-1 == fd)
