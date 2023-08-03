@@ -754,6 +754,12 @@ bool CachedOnDiskReadBufferFromFile::writeCache(char * data, size_t size, size_t
 
     try
     {
+        LOG_DEBUG(
+            &Poco::Logger::get("debug"),
+            "file_segment.getPathInLocalCache()={}, offset={}, size={}",
+            file_segment.getPathInLocalCache(),
+            offset,
+            size);
         file_segment.write(data, size, offset);
     }
     catch (ErrnoException & e)

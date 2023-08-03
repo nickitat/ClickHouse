@@ -41,9 +41,10 @@ void registerDiskCache(DiskFactory & factory, bool /* global_skip_access_check *
         FileCacheSettings file_cache_settings;
         file_cache_settings.loadFromConfig(config, config_prefix);
 
-        if (!file_cache_settings.external_disk_name.empty())
+        /* if (!file_cache_settings.external_disk_name.empty())
             file_cache_settings.base_path = fs::path(context->getPath());
-        else if (file_cache_settings.base_path.empty())
+        else */
+        if (file_cache_settings.base_path.empty())
             file_cache_settings.base_path = fs::path(context->getPath()) / "disks" / name / "cache/";
         else if (fs::path(file_cache_settings.base_path).is_relative())
             file_cache_settings.base_path = fs::path(context->getPath()) / "caches" / file_cache_settings.base_path;

@@ -375,6 +375,8 @@ void FileSegment::write(const char * from, size_t size, size_t offset)
 
     try
     {
+        LOG_DEBUG(&Poco::Logger::get("debug"), "getPathInLocalCache()={}, offset={}, size={}", getPathInLocalCache(), offset, size);
+
         cache_writer->write(from, size);
 
         std::lock_guard lock(download_mutex);

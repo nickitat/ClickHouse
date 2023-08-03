@@ -8,6 +8,8 @@
 #include <IO/WriteBufferFromFile.h>
 #include <IO/WriteHelpers.h>
 
+#include <Poco/Logger.h>
+#include <Common/logger_useful.h>
 
 namespace ProfileEvents
 {
@@ -78,6 +80,9 @@ WriteBufferFromFile::~WriteBufferFromFile()
         return;
 
     finalize();
+
+    LOG_DEBUG(&Poco::Logger::get("debug"), "close() file_name={}", file_name);
+
     int err = ::close(fd);
     /// Everything except for EBADF should be ignored in dtor, since all of
     /// others (EINTR/EIO/ENOSPC/EDQUOT) could be possible during writing to
