@@ -64,7 +64,7 @@ friend class FileCache; /// Because of reserved_size in tryReserve().
 public:
     using Key = FileCacheKey;
     using RemoteFileReaderPtr = std::shared_ptr<ReadBufferFromFileBase>;
-    using LocalCacheWriterPtr = std::unique_ptr<WriteBufferFromFile>;
+    using LocalCacheWriterPtr = std::unique_ptr<WriteBufferFromFileBase>;
     using Downloader = std::string;
     using DownloaderId = std::string;
     using Priority = IFileCachePriority;

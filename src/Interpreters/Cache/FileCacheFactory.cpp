@@ -21,15 +21,14 @@ FileCacheFactory::CacheByName FileCacheFactory::getAll()
     return caches_by_name;
 }
 
-FileCachePtr FileCacheFactory::getOrCreate(
-    const std::string & cache_name, const FileCacheSettings & file_cache_settings)
+FileCachePtr FileCacheFactory::getOrCreate(const std::string & cache_name, const FileCacheSettings & file_cache_settings, DiskPtr storage)
 {
     std::lock_guard lock(mutex);
 
     auto it = caches_by_name.find(cache_name);
     if (it == caches_by_name.end())
     {
-        auto cache = std::make_shared<FileCache>(cache_name, file_cache_settings);
+        auto cache = std::make_shared<FileCache>(file_cache_settings, storage);
         it = caches_by_name.emplace(
             cache_name, std::make_unique<FileCacheData>(cache, file_cache_settings)).first;
     }

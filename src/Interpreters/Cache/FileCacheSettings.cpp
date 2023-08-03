@@ -18,6 +18,7 @@ void FileCacheSettings::loadFromConfig(const Poco::Util::AbstractConfiguration &
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Expected cache path (`path`) in configuration");
 
     base_path = config.getString(config_prefix + ".path");
+    external_disk_name = config.getString(config_prefix + ".external_disk", "");
 
     if (!config.has(config_prefix + ".max_size"))
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Expected cache size (`max_size`) in configuration");

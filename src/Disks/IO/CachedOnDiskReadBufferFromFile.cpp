@@ -148,7 +148,7 @@ CachedOnDiskReadBufferFromFile::getCacheReadBuffer(const FileSegment & file_segm
 {
     ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::CachedReadBufferCreateBufferMicroseconds);
 
-    auto path = file_segment.getPathInLocalCache();
+    /* auto path = file_segment.getPathInLocalCache(); */
 
     ReadSettings local_read_settings{settings};
     /// Do not allow to use asynchronous version of LocalFSReadMethod.
@@ -157,7 +157,14 @@ CachedOnDiskReadBufferFromFile::getCacheReadBuffer(const FileSegment & file_segm
     if (use_external_buffer)
         local_read_settings.local_fs_buffer_size = 0;
 
-    auto buf = createReadBufferFromFileBase(path, local_read_settings, std::nullopt, std::nullopt, file_segment.getFlagsForLocalRead());
+    auto path = fs::path(file_segment.key().toString().substr(0, 3)) / file_segment.key().toString()
+        / CacheMetadata::getFileNameForFileSegment(file_segment.offset(), file_segment.getKind());
+
+    LOG_DEBUG(&Poco::Logger::get("debug"), "file_segment_path={}, path={}", file_segment.getPathInLocalCache(), path);
+
+    /* auto buf = createReadBufferFromFileBase(path, local_read_settings, std::nullopt, std::nullopt, file_segment.getFlagsForLocalRead()); */
+
+    auto buf = cache->getDisk()->readFile(path, local_read_settings, std::nullopt, std::nullopt);
 
     if (getFileSizeFromReadBuffer(*buf) == 0)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Attempt to read from an empty cache file: {}", path);

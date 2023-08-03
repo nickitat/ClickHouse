@@ -13,7 +13,6 @@
 #include <Common/randomSeed.h>
 #include <Common/ThreadPool.h>
 #include <Common/ElapsedTimeProfileEventIncrement.h>
-#include <Disks/DiskLocal.h>
 
 
 namespace ProfileEvents
@@ -48,13 +47,13 @@ namespace ErrorCodes
     extern const int LOGICAL_ERROR;
 }
 
-FileCache::FileCache(const String & my_name, const FileCacheSettings & settings)
+FileCache::FileCache(const FileCacheSettings & settings, DiskPtr storage)
     : max_file_segment_size(settings.max_file_segment_size)
     , bypass_cache_threshold(settings.enable_bypass_cache_with_threashold ? settings.bypass_cache_threashold : 0)
     , delayed_cleanup_interval_ms(settings.delayed_cleanup_interval_ms)
     , boundary_alignment(settings.boundary_alignment)
     , background_download_threads(settings.background_download_threads)
-    , disk(std::make_shared<DiskLocal>(my_name, settings.base_path))
+    , disk(std::move(storage))
     , log(&Poco::Logger::get("FileCache"))
     , metadata(settings.base_path, disk)
 {

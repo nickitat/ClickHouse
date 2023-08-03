@@ -43,7 +43,7 @@ public:
     using PriorityIterator = IFileCachePriority::Iterator;
     using PriorityIterationResult = IFileCachePriority::IterationResult;
 
-    explicit FileCache(const String & my_name, const FileCacheSettings & settings);
+    explicit FileCache(const FileCacheSettings & settings, DiskPtr storage);
 
     ~FileCache();
 

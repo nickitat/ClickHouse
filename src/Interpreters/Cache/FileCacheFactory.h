@@ -2,6 +2,7 @@
 
 #include <Interpreters/Cache/FileCache_fwd.h>
 #include <Interpreters/Cache/FileCacheSettings.h>
+#include <Disks/IDisk.h>
 
 #include <boost/noncopyable.hpp>
 #include <unordered_map>
@@ -30,7 +31,7 @@ public:
 
     static FileCacheFactory & instance();
 
-    FileCachePtr getOrCreate(const std::string & cache_name, const FileCacheSettings & file_cache_settings);
+    FileCachePtr getOrCreate(const std::string & cache_name, const FileCacheSettings & file_cache_settings, DiskPtr storage);
 
     CacheByName getAll();
 

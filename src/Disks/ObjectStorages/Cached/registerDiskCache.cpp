@@ -1,12 +1,13 @@
-#include <Interpreters/Cache/FileCacheSettings.h>
-#include <Interpreters/Cache/FileCacheFactory.h>
-#include <Interpreters/Cache/FileCache.h>
-#include <Common/logger_useful.h>
-#include <Common/assert_cast.h>
 #include <Disks/DiskFactory.h>
+#include <Disks/DiskLocal.h>
 #include <Disks/ObjectStorages/Cached/CachedObjectStorage.h>
 #include <Disks/ObjectStorages/DiskObjectStorage.h>
+#include <Interpreters/Cache/FileCache.h>
+#include <Interpreters/Cache/FileCacheFactory.h>
+#include <Interpreters/Cache/FileCacheSettings.h>
 #include <Interpreters/Context.h>
+#include <Common/assert_cast.h>
+#include <Common/logger_useful.h>
 
 namespace DB
 {
@@ -45,7 +46,18 @@ void registerDiskCache(DiskFactory & factory, bool /* global_skip_access_check *
         else if (fs::path(file_cache_settings.base_path).is_relative())
             file_cache_settings.base_path = fs::path(context->getPath()) / "caches" / file_cache_settings.base_path;
 
-        auto cache = FileCacheFactory::instance().getOrCreate(name, file_cache_settings);
+        DiskPtr cache_storage;
+        if (!file_cache_settings.external_disk_name.empty())
+        {
+            if (auto it = map.find(file_cache_settings.external_disk_name); it != map.end())
+                cache_storage = it->second;
+            else
+                throw Exception(ErrorCodes::BAD_ARGUMENTS, "External disk {} is not found", file_cache_settings.external_disk_name);
+        }
+        else
+            cache_storage = std::make_shared<DiskLocal>(name, file_cache_settings.base_path);
+
+        auto cache = FileCacheFactory::instance().getOrCreate(name, file_cache_settings, cache_storage);
         auto disk = disk_it->second;
         if (!dynamic_cast<const DiskObjectStorage *>(disk.get()))
             throw Exception(ErrorCodes::BAD_ARGUMENTS,
