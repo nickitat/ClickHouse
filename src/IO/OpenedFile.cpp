@@ -31,7 +31,7 @@ void OpenedFile::open() const
 {
     ProfileEvents::increment(ProfileEvents::FileOpen);
 
-    LOG_DEBUG(&Poco::Logger::get("debug"), "file_name={}, exists={}", file_name, std::filesystem::exists(file_name));
+    LOG_DEBUG(&Poco::Logger::get("debug"), "open() file_name={}, exists={}", file_name, std::filesystem::exists(file_name));
     fd = ::open(file_name.c_str(), (flags == -1 ? 0 : flags) | O_RDONLY | O_CLOEXEC);
 
     if (-1 == fd)

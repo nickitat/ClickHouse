@@ -97,7 +97,6 @@ public:
         : ReadBufferFromFileDescriptorPRead(-1, buf_size, existing_memory, alignment, file_size_, throttler_)
         , file_name(file_name_)
     {
-        LOG_DEBUG(&Poco::Logger::get("debug"), "file_name={}", file_name);
         file = OpenedFileCache::instance().get(file_name, flags);
         fd = file->getFD();
     }

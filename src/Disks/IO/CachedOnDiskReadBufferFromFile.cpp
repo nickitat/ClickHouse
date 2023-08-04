@@ -157,7 +157,7 @@ CachedOnDiskReadBufferFromFile::getCacheReadBuffer(const FileSegment & file_segm
     if (use_external_buffer)
         local_read_settings.local_fs_buffer_size = 0;
 
-    LOG_DEBUG(&Poco::Logger::get("debug"), "file_segment_path={}, path={}", file_segment.getPathInLocalCache(), path);
+    LOG_DEBUG(&Poco::Logger::get("debug"), "getCacheReadBuffer() path={}, offset={}", path, file_offset_of_buffer_end);
 
     auto buf = cache->getDisk()->readFile(path, local_read_settings, std::nullopt, std::nullopt);
 
@@ -754,12 +754,6 @@ bool CachedOnDiskReadBufferFromFile::writeCache(char * data, size_t size, size_t
 
     try
     {
-        LOG_DEBUG(
-            &Poco::Logger::get("debug"),
-            "file_segment.getPathInLocalCache()={}, offset={}, size={}",
-            file_segment.getPathInLocalCache(),
-            offset,
-            size);
         file_segment.write(data, size, offset);
     }
     catch (ErrnoException & e)
