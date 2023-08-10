@@ -115,12 +115,12 @@ void registerDiskS3(DiskFactory & factory, bool global_skip_access_check)
         std::shared_ptr<S3ObjectStorage> s3_storage;
 
         String type = config.getString(config_prefix + ".type");
-        chassert(type == "s3" || type == "s3_plain");
+        chassert(type == "s3" || type == "s3_plain" || type == "s3_plain_cache");
 
         MetadataStoragePtr metadata_storage;
         auto settings = getSettings(config, config_prefix, context);
         auto client = getClient(config, config_prefix, context, *settings);
-        if (type == "s3_plain")
+        if (type == "s3_plain" || type == "s3_plain_cache")
         {
             /// send_metadata changes the filenames (includes revision), while
             /// s3_plain do not care about this, and expect that the file name
@@ -130,12 +130,18 @@ void registerDiskS3(DiskFactory & factory, bool global_skip_access_check)
             if (config.getBool(config_prefix + ".send_metadata", false))
                 throw Exception(ErrorCodes::BAD_ARGUMENTS, "s3_plain does not supports send_metadata");
 
-            s3_storage = std::make_shared<S3PlainObjectStorage>(std::move(client), std::move(settings), uri.version_id, s3_capabilities, uri.bucket, uri.endpoint);
+            s3_storage = type == "s3_plain"
+                ? std::make_shared<S3PlainObjectStorage>(
+                    std::move(client), std::move(settings), uri.version_id, s3_capabilities, uri.bucket, uri.endpoint)
+                : std::make_shared<S3PlainObjectStorageForCache>(
+                    std::move(client), std::move(settings), uri.version_id, s3_capabilities, uri.bucket, uri.endpoint);
+
             metadata_storage = std::make_shared<MetadataStorageFromPlainObjectStorage>(s3_storage, uri.key);
         }
         else
         {
-            s3_storage = std::make_shared<S3ObjectStorage>(std::move(client), std::move(settings), uri.version_id, s3_capabilities, uri.bucket, uri.endpoint);
+            s3_storage = std::make_shared<S3ObjectStorage>(
+                std::move(client), std::move(settings), uri.version_id, s3_capabilities, uri.bucket, uri.endpoint);
             auto [metadata_path, metadata_disk] = prepareForLocalMetadata(name, config, config_prefix, context);
             metadata_storage = std::make_shared<MetadataStorageFromDisk>(metadata_disk, uri.key);
         }
@@ -173,6 +179,7 @@ void registerDiskS3(DiskFactory & factory, bool global_skip_access_check)
     };
     factory.registerDiskType("s3", creator);
     factory.registerDiskType("s3_plain", creator);
+    factory.registerDiskType("s3_plain_cache", creator);
 }
 
 }
