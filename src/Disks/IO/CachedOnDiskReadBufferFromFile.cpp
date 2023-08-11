@@ -958,20 +958,26 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
             {
                 const size_t new_file_offset = file_offset_of_buffer_end + size;
                 const size_t file_segment_write_offset = file_segment.getCurrentWriteOffset(true);
-                if (new_file_offset > file_segment.range().right + 1 || new_file_offset > file_segment_write_offset)
-                {
-                    auto file_segment_path = file_segment.getPathInLocalCache();
-                    throw Exception(
-                        ErrorCodes::LOGICAL_ERROR,
-                        "Read unexpected size. "
-                        "File size: {}, file segment path: {}, impl size: {}, impl path: {}"
-                        "file segment info: {}",
-                        /* fs::file_size(file_segment_path) */ 42,
-                        file_segment_path,
-                        implementation_buffer->getFileSize(),
-                        implementation_buffer->getFileName(),
-                        file_segment.getInfoForLog());
-                }
+                LOG_DEBUG(
+                    &Poco::Logger::get("debug"),
+                    "new_file_offset={}, file_segment.range().right + 1={}, file_segment_write_offset={}",
+                    new_file_offset,
+                    file_segment.range().right + 1,
+                    file_segment_write_offset);
+                /* if (new_file_offset > file_segment.range().right + 1 || new_file_offset > file_segment_write_offset) */
+                /* { */
+                /* auto file_segment_path = file_segment.getPathInLocalCache(); */
+                /* throw Exception( */
+                /* ErrorCodes::LOGICAL_ERROR, */
+                /* "Read unexpected size. " */
+                /* "File size: {}, file segment path: {}, impl size: {}, impl path: {}" */
+                /* "file segment info: {}", */
+                /* /1* fs::file_size(file_segment_path) *1/ 42, */
+                /* file_segment_path, */
+                /* implementation_buffer->getFileSize(), */
+                /* implementation_buffer->getFileName(), */
+                /* file_segment.getInfoForLog()); */
+                /* } */
             }
         }
         else
