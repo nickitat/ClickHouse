@@ -516,7 +516,7 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
         { return fmt::format("addr_to_str(b.begin())={}, b.size()={}", addr_to_str(b.begin()), b.size()); };
 
         return fmt::format(
-            "buf.available()={}, buf.count()={}, buf.offset()={}, buf.position()={}, desc(buf.buffer())={}, "
+            "\nbuf.available()={}, buf.count()={}, buf.offset()={}, buf.position()={},\n\tdesc(buf.buffer())={},\n\t"
             "desc(buf.internalBuffer()));={}",
             buf.available(),
             buf.count(),
@@ -529,7 +529,7 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
     class ReadBuffer : public ReadBufferFromFileBase
     {
     public:
-        ReadBuffer(const std::string & data, const std::string & remote_path_) : memory_reader(data), path(remote_path_)
+        ReadBuffer(std::string & data_, const std::string & remote_path_) : data(data_), memory_reader(data), path(remote_path_)
         {
             LOG_DEBUG(
                 &Poco::Logger::get("debug"),
@@ -559,11 +559,60 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
 
         off_t getPosition() override { return memory_reader.getPosition(); }
 
+        size_t getFileOffsetOfBufferEnd() const override
+        {
+            LOG_DEBUG(
+                &Poco::Logger::get("debug"),
+                "__PRETTY_FUNCTION__={}, __LINE__={}, path={}, data.size()={}, describe(*this)={}, describe(memory_reader)={}",
+                __PRETTY_FUNCTION__,
+                __LINE__,
+                path,
+                data.size(),
+                describe(const_cast<ReadBuffer &>(*this)),
+                describe(memory_reader));
+
+            /* return const_cast<ReadBuffer &>(*this).buffer().size(); */
+            return memory_reader.offset();
+        }
+
         off_t seek(off_t offset, int whence) override
         {
+            LOG_DEBUG(&Poco::Logger::get("debug"), "offset={}, whence={}", offset, whence);
+
+            LOG_DEBUG(
+                &Poco::Logger::get("debug"),
+                "__PRETTY_FUNCTION__={}, __LINE__={}, path={}, data.size()={}, describe(*this)={}, describe(memory_reader)={}",
+                __PRETTY_FUNCTION__,
+                __LINE__,
+                path,
+                data.size(),
+                describe(const_cast<ReadBuffer &>(*this)),
+                describe(memory_reader));
+
             const auto ret = memory_reader.seek(offset, whence);
 
+            LOG_DEBUG(
+                &Poco::Logger::get("debug"),
+                "__PRETTY_FUNCTION__={}, __LINE__={}, path={}, data.size()={}, describe(*this)={}, describe(memory_reader)={}",
+                __PRETTY_FUNCTION__,
+                __LINE__,
+                path,
+                data.size(),
+                describe(const_cast<ReadBuffer &>(*this)),
+                describe(memory_reader));
+
             updateBuffer();
+
+            LOG_DEBUG(
+                &Poco::Logger::get("debug"),
+                "__PRETTY_FUNCTION__={}, __LINE__={}, path={}, data.size()={}, describe(*this)={}, describe(memory_reader)={}",
+                __PRETTY_FUNCTION__,
+                __LINE__,
+                path,
+                data.size(),
+                describe(const_cast<ReadBuffer &>(*this)),
+                describe(memory_reader));
+
             return ret;
         }
 
@@ -573,10 +622,45 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
 
         bool nextImpl() override
         {
-            const auto ret = memory_reader.next();
+            LOG_DEBUG(
+                &Poco::Logger::get("debug"),
+                "__PRETTY_FUNCTION__={}, __LINE__={}, path={}, data.size()={}, describe(*this)={}, describe(memory_reader)={}",
+                __PRETTY_FUNCTION__,
+                __LINE__,
+                path,
+                data.size(),
+                describe(const_cast<ReadBuffer &>(*this)),
+                describe(memory_reader));
 
-            updateBuffer();
-            return ret;
+            if (!memory_reader.available())
+                memory_reader.next();
+
+            const auto read = memory_reader.read(internalBuffer().begin(), internalBuffer().size());
+            BufferBase::set(internalBuffer().begin(), read, 0);
+
+            LOG_DEBUG(
+                &Poco::Logger::get("debug"),
+                "__PRETTY_FUNCTION__={}, __LINE__={}, path={}, data.size()={}, describe(*this)={}, describe(memory_reader)={}",
+                __PRETTY_FUNCTION__,
+                __LINE__,
+                path,
+                data.size(),
+                describe(const_cast<ReadBuffer &>(*this)),
+                describe(memory_reader));
+
+            /* updateBuffer(); */
+
+            LOG_DEBUG(
+                &Poco::Logger::get("debug"),
+                "__PRETTY_FUNCTION__={}, __LINE__={}, path={}, data.size()={}, describe(*this)={}, describe(memory_reader)={}",
+                __PRETTY_FUNCTION__,
+                __LINE__,
+                path,
+                data.size(),
+                describe(const_cast<ReadBuffer &>(*this)),
+                describe(memory_reader));
+
+            return read > 0;
         }
 
     private:
@@ -586,7 +670,9 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
             BufferBase::set(buf.begin(), buf.size(), memory_reader.offset());
         }
 
-        ReadBufferFromString memory_reader;
+        std::string & data; /// remove me
+
+        mutable ReadBufferFromString memory_reader;
         const std::string path;
     };
 
@@ -632,7 +718,9 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
                 describe(*this),
                 describe(memory_writer));
 
-            memory_writer.next();
+            /* memory_writer.next(); */
+
+            BufferBase::set(position(), available(), 0);
 
             LOG_DEBUG(
                 &Poco::Logger::get("debug"),
@@ -642,6 +730,8 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
                 data.size(),
                 describe(*this),
                 describe(memory_writer));
+
+            LOG_DEBUG(&Poco::Logger::get("debug"), "0pos={}", data.find_last_not_of('\0') + 1);
 
             /* updateBuffer(); */
 
@@ -672,7 +762,7 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
             /// 1. `memory_writer` doesn't buffer anything, because it doesn't have it's own buffer
             /// 2. actually, if called - it will reset `data` to an empty string
 
-            LOG_DEBUG(&Poco::Logger::get("debug"), "s={}", data);
+            LOG_DEBUG(&Poco::Logger::get("debug"), "s={}", data.substr(0, 10));
 
             LOG_DEBUG(
                 &Poco::Logger::get("debug"),

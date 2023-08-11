@@ -416,6 +416,8 @@ CachedOnDiskReadBufferFromFile::getImplementationBuffer(FileSegment & file_segme
 
     read_buffer_for_file_segment->setReadUntilPosition(range.right + 1); /// [..., range.right]
 
+    LOG_DEBUG(&Poco::Logger::get("debug"), "range.toString()={}", range.toString());
+
     switch (read_type)
     {
         case ReadType::CACHED:
@@ -802,7 +804,7 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
     if (file_segments->empty())
         return false;
 
-    const size_t original_buffer_size = internal_buffer.size();
+    /* const size_t original_buffer_size = internal_buffer.size(); */
 
     bool implementation_buffer_can_be_reused = false;
     SCOPE_EXIT({
@@ -829,8 +831,8 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
                 }
             }
 
-            if (use_external_buffer && !internal_buffer.empty())
-                internal_buffer.resize(original_buffer_size);
+            /* if (use_external_buffer && !internal_buffer.empty()) */
+            /* internal_buffer.resize(original_buffer_size); */
 
             chassert(!file_segment.isDownloader());
         }
@@ -856,10 +858,12 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
 
     chassert(!internal_buffer.empty());
 
+    LOG_DEBUG(&Poco::Logger::get("debug"), "buffer().size()={}, internal_buffer.size()={}", buffer().size(), internal_buffer.size());
+
     /// We allocate buffers not less than 1M so that s3 requests will not be too small. But the same buffers (members of AsynchronousReadIndirectBufferFromRemoteFS)
     /// are used for reading from files. Some of these readings are fairly small and their performance degrade when we use big buffers (up to ~20% for queries like Q23 from ClickBench).
-    if (use_external_buffer && read_type == ReadType::CACHED && settings.local_fs_buffer_size < internal_buffer.size())
-        internal_buffer.resize(settings.local_fs_buffer_size);
+    /* if (use_external_buffer && read_type == ReadType::CACHED && settings.local_fs_buffer_size < internal_buffer.size()) */
+    /* internal_buffer.resize(settings.local_fs_buffer_size); */
 
     // Pass a valid external buffer for implementation_buffer to read into.
     // We then take it back with another swap() after reading is done.
@@ -958,11 +962,14 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
                 {
                     auto file_segment_path = file_segment.getPathInLocalCache();
                     throw Exception(
-                        ErrorCodes::LOGICAL_ERROR, "Read unexpected size. "
+                        ErrorCodes::LOGICAL_ERROR,
+                        "Read unexpected size. "
                         "File size: {}, file segment path: {}, impl size: {}, impl path: {}"
                         "file segment info: {}",
-                        fs::file_size(file_segment_path), file_segment_path,
-                        implementation_buffer->getFileSize(), implementation_buffer->getFileName(),
+                        /* fs::file_size(file_segment_path) */ 42,
+                        file_segment_path,
+                        implementation_buffer->getFileSize(),
+                        implementation_buffer->getFileName(),
                         file_segment.getInfoForLog());
                 }
             }
