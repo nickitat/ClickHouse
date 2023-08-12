@@ -74,7 +74,9 @@ bool AsynchronousBoundedReadBuffer::hasPendingDataToRead()
             throw Exception(
                 ErrorCodes::LOGICAL_ERROR,
                 "Read beyond last offset ({} > {}, info: {})",
-                file_offset_of_buffer_end, *read_until_position, impl->getInfoForLog());
+                file_offset_of_buffer_end,
+                *read_until_position,
+                impl->getInfoForLog());
         }
     }
 

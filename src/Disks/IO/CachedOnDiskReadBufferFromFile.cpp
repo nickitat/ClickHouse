@@ -1,4 +1,6 @@
 #include "CachedOnDiskReadBufferFromFile.h"
+#include <sstream>
+#include <thread>
 
 #include <Disks/IO/createReadBufferFromFileBase.h>
 #include <Disks/ObjectStorages/Cached/CachedObjectStorage.h>
@@ -414,7 +416,13 @@ CachedOnDiskReadBufferFromFile::getImplementationBuffer(FileSegment & file_segme
     chassert(file_segment.range() == range);
     chassert(file_offset_of_buffer_end >= range.left && file_offset_of_buffer_end <= range.right);
 
-    read_buffer_for_file_segment->setReadUntilPosition(range.right + 1); /// [..., range.right]
+    if (read_type == ReadType::CACHED)
+    {
+        const size_t read_until = range.right + 1 - range.left;
+        read_buffer_for_file_segment->setReadUntilPosition(read_until);
+    }
+    else
+        read_buffer_for_file_segment->setReadUntilPosition(range.right + 1); /// [..., range.right]
 
     LOG_DEBUG(&Poco::Logger::get("debug"), "range.toString()={}", range.toString());
 
@@ -858,6 +866,20 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
 
     chassert(!internal_buffer.empty());
 
+    if (read_type == ReadType::CACHED)
+    {
+        const size_t to_read = std::min(
+            internal_buffer.size(), file_segments->front().getDownloadedSize(true) - implementation_buffer->getFileOffsetOfBufferEnd());
+        LOG_DEBUG(
+            &Poco::Logger::get("debug"),
+            "file_segments->front().getDownloadedSize(true)={}, implementation_buffer->offset()={}, "
+            "implementation_buffer->getFileOffsetOfBufferEnd()={}",
+            file_segments->front().getDownloadedSize(true),
+            implementation_buffer->offset(),
+            implementation_buffer->getFileOffsetOfBufferEnd());
+        internal_buffer.resize(to_read);
+    }
+
     LOG_DEBUG(&Poco::Logger::get("debug"), "buffer().size()={}, internal_buffer.size()={}", buffer().size(), internal_buffer.size());
 
     /// We allocate buffers not less than 1M so that s3 requests will not be too small. But the same buffers (members of AsynchronousReadIndirectBufferFromRemoteFS)
@@ -964,20 +986,20 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
                     new_file_offset,
                     file_segment.range().right + 1,
                     file_segment_write_offset);
-                /* if (new_file_offset > file_segment.range().right + 1 || new_file_offset > file_segment_write_offset) */
-                /* { */
-                /* auto file_segment_path = file_segment.getPathInLocalCache(); */
-                /* throw Exception( */
-                /* ErrorCodes::LOGICAL_ERROR, */
-                /* "Read unexpected size. " */
-                /* "File size: {}, file segment path: {}, impl size: {}, impl path: {}" */
-                /* "file segment info: {}", */
-                /* /1* fs::file_size(file_segment_path) *1/ 42, */
-                /* file_segment_path, */
-                /* implementation_buffer->getFileSize(), */
-                /* implementation_buffer->getFileName(), */
-                /* file_segment.getInfoForLog()); */
-                /* } */
+                if (new_file_offset > file_segment.range().right + 1 || new_file_offset > file_segment_write_offset)
+                {
+                    auto file_segment_path = file_segment.getPathInLocalCache();
+                    throw Exception(
+                        ErrorCodes::LOGICAL_ERROR,
+                        "Read unexpected size. "
+                        "File size: {}, file segment path: {}, impl size: {}, impl path: {}"
+                        "file segment info: {}",
+                        /* fs::file_size(file_segment_path) */ 42,
+                        file_segment_path,
+                        implementation_buffer->getFileSize(),
+                        implementation_buffer->getFileName(),
+                        file_segment.getInfoForLog());
+                }
             }
         }
         else
@@ -1060,11 +1082,15 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
         size_t cache_file_size = getFileSizeFromReadBuffer(*implementation_buffer);
         auto cache_file_path = getFileNameFromReadBuffer(*implementation_buffer);
 
+        std::stringstream ss;
+        ss << std::this_thread::get_id();
+
         throw Exception(
             ErrorCodes::LOGICAL_ERROR,
-            "Having zero bytes, but range is not finished: file offset: {}, starting offset: {}, "
+            "{} Having zero bytes, but range is not finished: file offset: {}, starting offset: {}, "
             "reading until: {}, read type: {}, cache file size: {}, cache file path: {}, "
             "cache file offset: {}, current file segment: {}",
+            CurrentThread::get().thread_id,
             file_offset_of_buffer_end,
             first_offset,
             read_until_position,

@@ -1,3 +1,4 @@
+#include <atomic>
 #include <mutex>
 #include <Disks/ObjectStorages/S3/S3ObjectStorage.h>
 
@@ -529,7 +530,12 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
     class ReadBuffer : public ReadBufferFromFileBase
     {
     public:
-        ReadBuffer(std::string & data_, const std::string & remote_path_) : data(data_), memory_reader(data), path(remote_path_)
+        ReadBuffer(std::string & data_, std::shared_ptr<std::atomic_uint64_t> written_, const std::string & remote_path_)
+            : data(data_)
+            , written(std::move(written_))
+            , memory_reader(data)
+            , path(remote_path_)
+            , start_offset(/* path.find_last_of('/') != path.npos ? std::stoi(path.substr(path.find_last_of('/') + 1)) : */ 0)
         {
             LOG_DEBUG(
                 &Poco::Logger::get("debug"),
@@ -555,6 +561,10 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
                 data.size(),
                 describe(*this),
                 describe(memory_reader));
+
+            read_until_position = start_offset + memory_reader.buffer().size();
+
+            LOG_DEBUG(&Poco::Logger::get("debug"), "read_until_position={}", read_until_position);
         }
 
         off_t getPosition() override { return memory_reader.getPosition(); }
@@ -573,6 +583,23 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
 
             /* return const_cast<ReadBuffer &>(*this).buffer().size(); */
             return memory_reader.offset();
+        }
+
+        void setReadUntilPosition(size_t position) override
+        {
+            if (position > data.size())
+                throw Exception(
+                    ErrorCodes::LOGICAL_ERROR,
+                    "setReadUntilPosition: position={}, read_until_position={}, data.size()={}, describe(this)={}, "
+                    "describe(memory_reader)={}",
+                    position,
+                    read_until_position,
+                    data.size(),
+                    describe(*this),
+                    describe(memory_reader));
+
+            read_until_position = position;
+            LOG_DEBUG(&Poco::Logger::get("debug"), "setReadUntilPosition(): read_until_position={}", read_until_position);
         }
 
         off_t seek(off_t offset, int whence) override
@@ -618,10 +645,13 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
 
         std::string getFileName() const override { return path; }
 
-        size_t getFileSize() override { return buffer().size(); }
+        size_t getFileSize() override { return read_until_position; }
 
         bool nextImpl() override
         {
+            if (!memory_reader.available())
+                memory_reader.next();
+
             LOG_DEBUG(
                 &Poco::Logger::get("debug"),
                 "__PRETTY_FUNCTION__={}, __LINE__={}, path={}, data.size()={}, describe(*this)={}, describe(memory_reader)={}",
@@ -632,8 +662,15 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
                 describe(const_cast<ReadBuffer &>(*this)),
                 describe(memory_reader));
 
-            if (!memory_reader.available())
-                memory_reader.next();
+            const size_t to_read = std::min<size_t>(read_until_position - start_offset, -1 /* *written */) - memory_reader.offset();
+            internalBuffer().resize(std::min(to_read, internalBuffer().size()));
+            LOG_DEBUG(
+                &Poco::Logger::get("debug"),
+                "start_offset={}, read_until_position={}, *written={}, memory_reader.count()={}",
+                start_offset,
+                read_until_position,
+                *written,
+                memory_reader.count());
 
             const auto read = memory_reader.read(internalBuffer().begin(), internalBuffer().size());
             BufferBase::set(internalBuffer().begin(), read, 0);
@@ -670,17 +707,24 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
             BufferBase::set(buf.begin(), buf.size(), memory_reader.offset());
         }
 
-        std::string & data; /// remove me
+        std::string & data;
+        std::shared_ptr<std::atomic_uint64_t> written;
 
         mutable ReadBufferFromString memory_reader;
         const std::string path;
+        const size_t start_offset;
+        size_t read_until_position;
     };
 
     class WriteBuffer : public WriteBufferFromFileBase
     {
     public:
-        WriteBuffer(std::string & data_, std::unique_ptr<WriteBufferFromFileBase> impl_)
-            : WriteBufferFromFileBase(0, nullptr, 0), data(data_), memory_writer(data), remote_writer(std::move(impl_))
+        WriteBuffer(std::string & data_, std::shared_ptr<std::atomic_uint64_t> written_, std::unique_ptr<WriteBufferFromFileBase> impl_)
+            : WriteBufferFromFileBase(0, nullptr, 0)
+            , data(data_)
+            , written(std::move(written_))
+            , memory_writer(data)
+            , remote_writer(std::move(impl_))
         {
             LOG_DEBUG(
                 &Poco::Logger::get("debug"),
@@ -721,6 +765,10 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
             /* memory_writer.next(); */
 
             BufferBase::set(position(), available(), 0);
+            *written = count();
+
+            LOG_DEBUG(
+                &Poco::Logger::get("debug"), "__PRETTY_FUNCTION__={}, __LINE__={}, *written={}", __PRETTY_FUNCTION__, __LINE__, *written);
 
             LOG_DEBUG(
                 &Poco::Logger::get("debug"),
@@ -773,7 +821,8 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
                 describe(*this),
                 describe(memory_writer));
 
-            memory_writer.set(buffer().begin(), buffer().size(), count());
+            memory_writer.set(data.data(), count(), count());
+            *written = count();
 
             LOG_DEBUG(
                 &Poco::Logger::get("debug"),
@@ -798,6 +847,7 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
         }
 
         std::string & data; /// remove me
+        std::shared_ptr<std::atomic_uint64_t> written;
 
         WriteBufferFromString memory_writer;
         std::unique_ptr<WriteBufferFromFileBase> remote_writer;
@@ -806,20 +856,21 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
 public:
     explicit SuperWriteBufferFromFile(const std::string & remote_path_) : remote_path(remote_path_)
     {
-        s.resize(32 * 1024 * 1024, '\0');
+        s.resize(32 * 1024 * 1024, '\0'); /// Max file segment size
+        written = std::make_shared<std::atomic_uint64_t>(0);
         LOG_DEBUG(&Poco::Logger::get("debug"), "ctor s.size()={}", s.size());
     }
 
     std::unique_ptr<ReadBufferFromFileBase> getReadBuffer()
     {
         LOG_DEBUG(&Poco::Logger::get("debug"), "read s.size()={}", s.size());
-        return std::make_unique<ReadBuffer>(s, remote_path);
+        return std::make_unique<ReadBuffer>(s, written, remote_path);
     }
 
     std::unique_ptr<WriteBufferFromFileBase> getWriteBuffer(std::unique_ptr<WriteBufferFromFileBase> impl)
     {
         LOG_DEBUG(&Poco::Logger::get("debug"), "write s.size()={}", s.size());
-        auto ret = std::make_unique<WriteBuffer>(s, std::move(impl));
+        auto ret = std::make_unique<WriteBuffer>(s, written, std::move(impl));
         LOG_DEBUG(&Poco::Logger::get("debug"), "write2 s.size()={}", s.size());
         return ret;
     }
@@ -828,6 +879,7 @@ private:
     const std::string remote_path;
 
     std::string s;
+    std::shared_ptr<std::atomic_uint64_t> written;
 };
 
 S3PlainObjectStorageForCache::~S3PlainObjectStorageForCache() = default;
