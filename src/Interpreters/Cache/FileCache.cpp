@@ -869,9 +869,9 @@ void FileCache::loadMetadata()
     size_t total_size = 0;
     for (auto key_prefix_it = disk->iterateDirectory(metadata.getBaseDirectory()); key_prefix_it->isValid(); key_prefix_it->next())
     {
-        const fs::path key_prefix_directory = key_prefix_it->path();
+        const fs::path key_prefix_directory = fs::path(metadata.getBaseDirectory()) / key_prefix_it->path();
 
-        if (!disk->isDirectory(key_prefix_it->path()))
+        if (!disk->isDirectory(key_prefix_directory))
         {
             if (key_prefix_directory.filename() != "status")
             {
@@ -890,9 +890,9 @@ void FileCache::loadMetadata()
 
         for (/* key_it already initialized to verify emptiness */; key_it->isValid(); key_it->next())
         {
-            const fs::path key_directory = key_it->path();
+            const fs::path key_directory = key_prefix_directory / key_it->path();
 
-            if (!disk->isDirectory(key_it->path()))
+            if (!disk->isDirectory(key_directory))
             {
                 LOG_DEBUG(
                     log,
@@ -913,6 +913,7 @@ void FileCache::loadMetadata()
 
             for (auto offset_it = disk->iterateDirectory(key_directory); offset_it->isValid(); offset_it->next())
             {
+                const fs::path offset_path = key_directory / offset_it->path();
                 auto offset_with_suffix = offset_it->name();
                 auto delim_pos = offset_with_suffix.find('_');
                 bool parsed;
@@ -926,12 +927,12 @@ void FileCache::loadMetadata()
                     if (offset_with_suffix.substr(delim_pos+1) == "persistent")
                     {
                         /// For compatibility. Persistent files are no longer supported.
-                        disk->removeFile(offset_it->path());
+                        disk->removeFile(offset_path);
                         continue;
                     }
                     if (offset_with_suffix.substr(delim_pos+1) == "temporary")
                     {
-                        disk->removeFile(offset_it->path());
+                        disk->removeFile(offset_path);
                         continue;
                     }
                 }
@@ -942,10 +943,10 @@ void FileCache::loadMetadata()
                     continue; /// Or just remove? Some unexpected file.
                 }
 
-                size = disk->getFileSize(offset_it->path());
+                size = disk->getFileSize(offset_path);
                 if (!size)
                 {
-                    disk->removeFile(offset_it->path());
+                    disk->removeFile(offset_path);
                     continue;
                 }
 
@@ -963,7 +964,7 @@ void FileCache::loadMetadata()
                         tryLogCurrentException(__PRETTY_FUNCTION__);
                         chassert(false);
 
-                        disk->removeFile(offset_it->path());
+                        disk->removeFile(offset_path);
                         continue;
                     }
 
@@ -983,7 +984,7 @@ void FileCache::loadMetadata()
                         "cached file `{}` does not fit in cache anymore (size: {})",
                         main_priority->getSizeLimit(), main_priority->getSize(lock), key_directory.string(), size);
 
-                    disk->removeFile(offset_it->path());
+                    disk->removeFile(offset_path);
                 }
             }
         }
