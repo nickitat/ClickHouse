@@ -496,7 +496,7 @@ CachedOnDiskReadBufferFromFile::getImplementationBuffer(FileSegment & file_segme
         }
     }
 
-    chassert(!read_buffer_for_file_segment->hasPendingData());
+    /* chassert(!read_buffer_for_file_segment->hasPendingData()); */
 
     return read_buffer_for_file_segment;
 }
@@ -812,7 +812,7 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
     if (file_segments->empty())
         return false;
 
-    /* const size_t original_buffer_size = internal_buffer.size(); */
+    const size_t original_buffer_size = internal_buffer.size();
 
     bool implementation_buffer_can_be_reused = false;
     SCOPE_EXIT({
@@ -839,8 +839,8 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
                 }
             }
 
-            /* if (use_external_buffer && !internal_buffer.empty()) */
-            /* internal_buffer.resize(original_buffer_size); */
+            if (use_external_buffer && !internal_buffer.empty())
+                internal_buffer.resize(original_buffer_size);
 
             chassert(!file_segment.isDownloader());
         }

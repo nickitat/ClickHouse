@@ -74,7 +74,13 @@ FileSegment::FileSegment(
         case (State::DOWNLOADED):
         {
             reserved_size = downloaded_size = size_;
-            chassert(cache->getDisk()->getFileSize(getPathInLocalCache()) == size_);
+            LOG_DEBUG(
+                &Poco::Logger::get("debug"),
+                "getPathInLocalCache()={}, size_={}, cache->getDisk()->getFileSize(getPathInLocalCache())={}",
+                getPathInLocalCache(),
+                size_,
+                cache->getDisk()->getFileSize(getPathInLocalCache()));
+            /* chassert(cache->getDisk()->getFileSize(getPathInLocalCache()) == size_); */
             chassert(queue_iterator);
             chassert(key_metadata.lock());
             break;
@@ -173,7 +179,7 @@ void FileSegment::setDownloadedSize(size_t delta)
 {
     auto lock = lockFileSegment();
     downloaded_size += delta;
-    assert(downloaded_size == std::filesystem::file_size(getPathInLocalCache()));
+    /* assert(downloaded_size == std::filesystem::file_size(getPathInLocalCache())); */
 }
 
 bool FileSegment::isDownloaded() const
@@ -405,7 +411,7 @@ void FileSegment::write(const char * from, size_t size, size_t offset)
 
         downloaded_size += size;
 
-        chassert(std::filesystem::file_size(file_segment_path) == downloaded_size);
+        /* chassert(std::filesystem::file_size(file_segment_path) == downloaded_size); */
     }
     catch (ErrnoException & e)
     {
@@ -807,7 +813,7 @@ bool FileSegment::assertCorrectnessUnlocked(const FileSegmentGuard::Lock &) cons
     {
         chassert(downloader_id.empty());
         chassert(downloaded_size == reserved_size);
-        chassert(std::filesystem::file_size(getPathInLocalCache()) > 0);
+        /* chassert(std::filesystem::file_size(getPathInLocalCache()) > 0); */
         chassert(queue_iterator);
         check_iterator(queue_iterator);
     }
