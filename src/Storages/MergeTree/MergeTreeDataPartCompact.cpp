@@ -101,8 +101,16 @@ void MergeTreeDataPartCompact::loadIndexGranularityImpl(
 
     size_t marks_file_size = data_part_storage_.getFileSize(marks_file_path);
 
-    std::unique_ptr<ReadBufferFromFileBase> buffer = data_part_storage_.readFile(
-        marks_file_path, ReadSettings().adjustBufferSize(marks_file_size), marks_file_size, std::nullopt);
+    auto read_settings = ReadSettings().adjustBufferSize(marks_file_size);
+    std::unique_ptr<ReadBufferFromFileBase> buffer
+        = data_part_storage_.readFile(marks_file_path, read_settings, marks_file_size, std::nullopt);
+
+    LOG_DEBUG(
+        &Poco::Logger::get("debug"),
+        "buffer->available()={}, buffer->count()={}, buffer->offset()={}",
+        buffer->available(),
+        buffer->count(),
+        buffer->offset());
 
     std::unique_ptr<ReadBuffer> marks_reader;
     bool marks_compressed = index_granularity_info_.mark_type.compressed;
@@ -110,6 +118,13 @@ void MergeTreeDataPartCompact::loadIndexGranularityImpl(
         marks_reader = std::make_unique<CompressedReadBufferFromFile>(std::move(buffer));
     else
         marks_reader = std::move(buffer);
+
+    LOG_DEBUG(
+        &Poco::Logger::get("debug"),
+        "marks_reader->available()={}, marks_reader->count()={}, marks_reader->offset()={}",
+        marks_reader->available(),
+        marks_reader->count(),
+        marks_reader->offset());
 
     while (!marks_reader->eof())
     {

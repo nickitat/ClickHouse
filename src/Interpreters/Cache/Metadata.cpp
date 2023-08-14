@@ -607,6 +607,7 @@ KeyMetadata::iterator LockedKey::removeFileSegment(size_t offset, const FileSegm
     file_segment->detach(segment_lock, *this);
 
     const auto path = key_metadata->getFileSegmentPath(*file_segment);
+    LOG_DEBUG(&Poco::Logger::get("debug"), "removeFileSegment path={}, key_path={}", path, key_metadata->key_path);
     bool exists = disk->exists(path);
     if (exists)
     {

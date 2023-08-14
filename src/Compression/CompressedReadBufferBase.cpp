@@ -16,6 +16,9 @@
 #include <IO/WriteHelpers.h>
 #include <IO/Operators.h>
 
+#include <Poco/Logger.h>
+#include <Common/logger_useful.h>
+
 
 namespace ProfileEvents
 {
@@ -116,6 +119,7 @@ static void readHeaderAndGetCodecAndSize(
     size_t & size_compressed_without_checksum,
     bool allow_different_codecs)
 {
+    LOG_DEBUG(&Poco::Logger::get("debug"), "compressed_buffer[0]={}", compressed_buffer[0]);
     uint8_t method = ICompressionCodec::readMethod(compressed_buffer);
 
     if (!codec)

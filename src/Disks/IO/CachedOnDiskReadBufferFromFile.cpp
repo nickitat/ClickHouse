@@ -155,9 +155,19 @@ CachedOnDiskReadBufferFromFile::getCacheReadBuffer(const FileSegment & file_segm
     ReadSettings local_read_settings{settings};
     /// Do not allow to use asynchronous version of LocalFSReadMethod.
     local_read_settings.local_fs_method = LocalFSReadMethod::pread;
+    local_read_settings.for_object_storage = true;
+    local_read_settings.load_marks_asynchronously = false;
+    local_read_settings.local_fs_prefetch = false;
+    local_read_settings.read_from_filesystem_cache_if_exists_otherwise_bypass_cache = true;
+    local_read_settings.remote_fs_cache = nullptr;
+    local_read_settings.remote_fs_prefetch = false;
+    local_read_settings.remote_fs_method = RemoteFSReadMethod::read;
 
     if (use_external_buffer)
+    {
         local_read_settings.local_fs_buffer_size = 0;
+        local_read_settings.remote_fs_buffer_size = 0;
+    }
 
     LOG_DEBUG(&Poco::Logger::get("debug"), "getCacheReadBuffer() path={}, offset={}", path, file_offset_of_buffer_end);
 
@@ -534,6 +544,23 @@ CachedOnDiskReadBufferFromFile::~CachedOnDiskReadBufferFromFile()
     }
 }
 
+std::string describe(BufferBase & buf)
+{
+    auto addr_to_str = [](const char * ptr) { return static_cast<const void *>(ptr); };
+    auto desc
+        = [&](BufferBase::Buffer & b) { return fmt::format("addr_to_str(b.begin())={}, b.size()={}", addr_to_str(b.begin()), b.size()); };
+
+    return fmt::format(
+        "\nbuf.available()={}, buf.count()={}, buf.offset()={}, buf.position()={},\n\tdesc(buf.buffer())={},\n\t"
+        "desc(buf.internalBuffer()));={}",
+        buf.available(),
+        buf.count(),
+        buf.offset(),
+        addr_to_str(buf.position()),
+        desc(buf.buffer()),
+        desc(buf.internalBuffer()));
+}
+
 void CachedOnDiskReadBufferFromFile::predownload(FileSegment & file_segment)
 {
     Stopwatch predownload_watch(CLOCK_MONOTONIC);
@@ -625,7 +652,8 @@ void CachedOnDiskReadBufferFromFile::predownload(FileSegment & file_segment)
 
                 chassert(file_segment.getCurrentWriteOffset(false) == static_cast<size_t>(implementation_buffer->getPosition()));
 
-                continue_predownload = writeCache(implementation_buffer->buffer().begin(), current_predownload_size, current_offset, file_segment);
+                continue_predownload
+                    = writeCache(implementation_buffer->buffer().begin(), current_predownload_size, current_offset, file_segment);
                 if (continue_predownload)
                 {
                     current_offset += current_predownload_size;
@@ -812,7 +840,7 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
     if (file_segments->empty())
         return false;
 
-    const size_t original_buffer_size = internal_buffer.size();
+    /* const size_t original_buffer_size = internal_buffer.size(); */
 
     bool implementation_buffer_can_be_reused = false;
     SCOPE_EXIT({
@@ -839,8 +867,8 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
                 }
             }
 
-            if (use_external_buffer && !internal_buffer.empty())
-                internal_buffer.resize(original_buffer_size);
+            /* if (use_external_buffer && !internal_buffer.empty()) */
+            /* internal_buffer.resize(original_buffer_size); */
 
             chassert(!file_segment.isDownloader());
         }
@@ -880,6 +908,13 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
         internal_buffer.resize(to_read);
     }
 
+    LOG_DEBUG(
+        &Poco::Logger::get("debug"),
+        "__PRETTY_FUNCTION__={}, __LINE__={}, internal_buffer.begin()={}, internal_buffer.size()={}",
+        __PRETTY_FUNCTION__,
+        __LINE__,
+        static_cast<const void *>(internal_buffer.begin()),
+        internal_buffer.size());
     LOG_DEBUG(&Poco::Logger::get("debug"), "buffer().size()={}, internal_buffer.size()={}", buffer().size(), internal_buffer.size());
 
     /// We allocate buffers not less than 1M so that s3 requests will not be too small. But the same buffers (members of AsynchronousReadIndirectBufferFromRemoteFS)
@@ -959,7 +994,10 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
         current_file_segment_counters.increment(ProfileEvents::FileSegmentReadMicroseconds, elapsed);
 
         // We don't support implementation_buffer implementations that use nextimpl_working_buffer_offset.
-        chassert(implementation_buffer->position() == implementation_buffer->buffer().begin());
+        if (implementation_buffer->position() != implementation_buffer->buffer().begin())
+        {
+            throw Exception(ErrorCodes::BAD_ARGUMENTS, "{}", describe(*implementation_buffer));
+        }
 
         if (result)
             size = implementation_buffer->buffer().size();
