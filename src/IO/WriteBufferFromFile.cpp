@@ -45,8 +45,6 @@ WriteBufferFromFile::WriteBufferFromFile(
         flags = flags & ~O_DIRECT;
 #endif
 
-    LOG_DEBUG(&Poco::Logger::get("debug"), "open() file_name={}", file_name);
-
     fd = ::open(file_name.c_str(), flags == -1 ? O_WRONLY | O_TRUNC | O_CREAT | O_CLOEXEC : flags | O_CLOEXEC, mode);
 
     if (-1 == fd)
@@ -82,8 +80,6 @@ WriteBufferFromFile::~WriteBufferFromFile()
         return;
 
     finalize();
-
-    LOG_DEBUG(&Poco::Logger::get("debug"), "close() file_name={}", file_name);
 
     int err = ::close(fd);
     /// Everything except for EBADF should be ignored in dtor, since all of

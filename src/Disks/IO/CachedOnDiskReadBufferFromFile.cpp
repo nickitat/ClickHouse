@@ -169,7 +169,7 @@ CachedOnDiskReadBufferFromFile::getCacheReadBuffer(const FileSegment & file_segm
         local_read_settings.remote_fs_buffer_size = 0;
     }
 
-    LOG_DEBUG(&Poco::Logger::get("debug"), "getCacheReadBuffer() path={}, offset={}", path, file_offset_of_buffer_end);
+    /* LOG_DEBUG(&Poco::Logger::get("debug"), "getCacheReadBuffer() path={}, offset={}", path, file_offset_of_buffer_end); */
 
     auto buf = cache->getDisk()->readFile(path, local_read_settings, std::nullopt, std::nullopt);
 
@@ -434,7 +434,7 @@ CachedOnDiskReadBufferFromFile::getImplementationBuffer(FileSegment & file_segme
     else
         read_buffer_for_file_segment->setReadUntilPosition(range.right + 1); /// [..., range.right]
 
-    LOG_DEBUG(&Poco::Logger::get("debug"), "range.toString()={}", range.toString());
+    /* LOG_DEBUG(&Poco::Logger::get("debug"), "range.toString()={}", range.toString()); */
 
     switch (read_type)
     {
@@ -898,24 +898,24 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
     {
         const size_t to_read = std::min(
             internal_buffer.size(), file_segments->front().getDownloadedSize(true) - implementation_buffer->getFileOffsetOfBufferEnd());
-        LOG_DEBUG(
-            &Poco::Logger::get("debug"),
-            "file_segments->front().getDownloadedSize(true)={}, implementation_buffer->offset()={}, "
-            "implementation_buffer->getFileOffsetOfBufferEnd()={}",
-            file_segments->front().getDownloadedSize(true),
-            implementation_buffer->offset(),
-            implementation_buffer->getFileOffsetOfBufferEnd());
+        /* LOG_DEBUG( */
+        /* &Poco::Logger::get("debug"), */
+        /* "file_segments->front().getDownloadedSize(true)={}, implementation_buffer->offset()={}, " */
+        /* "implementation_buffer->getFileOffsetOfBufferEnd()={}", */
+        /* file_segments->front().getDownloadedSize(true), */
+        /* implementation_buffer->offset(), */
+        /* implementation_buffer->getFileOffsetOfBufferEnd()); */
         internal_buffer.resize(to_read);
     }
 
-    LOG_DEBUG(
-        &Poco::Logger::get("debug"),
-        "__PRETTY_FUNCTION__={}, __LINE__={}, internal_buffer.begin()={}, internal_buffer.size()={}",
-        __PRETTY_FUNCTION__,
-        __LINE__,
-        static_cast<const void *>(internal_buffer.begin()),
-        internal_buffer.size());
-    LOG_DEBUG(&Poco::Logger::get("debug"), "buffer().size()={}, internal_buffer.size()={}", buffer().size(), internal_buffer.size());
+    /* LOG_DEBUG( */
+    /* &Poco::Logger::get("debug"), */
+    /* "__PRETTY_FUNCTION__={}, __LINE__={}, internal_buffer.begin()={}, internal_buffer.size()={}", */
+    /* __PRETTY_FUNCTION__, */
+    /* __LINE__, */
+    /* static_cast<const void *>(internal_buffer.begin()), */
+    /* internal_buffer.size()); */
+    /* LOG_DEBUG(&Poco::Logger::get("debug"), "buffer().size()={}, internal_buffer.size()={}", buffer().size(), internal_buffer.size()); */
 
     /// We allocate buffers not less than 1M so that s3 requests will not be too small. But the same buffers (members of AsynchronousReadIndirectBufferFromRemoteFS)
     /// are used for reading from files. Some of these readings are fairly small and their performance degrade when we use big buffers (up to ~20% for queries like Q23 from ClickBench).
@@ -994,10 +994,7 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
         current_file_segment_counters.increment(ProfileEvents::FileSegmentReadMicroseconds, elapsed);
 
         // We don't support implementation_buffer implementations that use nextimpl_working_buffer_offset.
-        if (implementation_buffer->position() != implementation_buffer->buffer().begin())
-        {
-            throw Exception(ErrorCodes::BAD_ARGUMENTS, "{}", describe(*implementation_buffer));
-        }
+        chassert(implementation_buffer->position() == implementation_buffer->buffer().begin());
 
         if (result)
             size = implementation_buffer->buffer().size();
@@ -1018,12 +1015,12 @@ bool CachedOnDiskReadBufferFromFile::nextImplStep()
             {
                 const size_t new_file_offset = file_offset_of_buffer_end + size;
                 const size_t file_segment_write_offset = file_segment.getCurrentWriteOffset(true);
-                LOG_DEBUG(
-                    &Poco::Logger::get("debug"),
-                    "new_file_offset={}, file_segment.range().right + 1={}, file_segment_write_offset={}",
-                    new_file_offset,
-                    file_segment.range().right + 1,
-                    file_segment_write_offset);
+                /* LOG_DEBUG( */
+                /* &Poco::Logger::get("debug"), */
+                /* "new_file_offset={}, file_segment.range().right + 1={}, file_segment_write_offset={}", */
+                /* new_file_offset, */
+                /* file_segment.range().right + 1, */
+                /* file_segment_write_offset); */
                 if (new_file_offset > file_segment.range().right + 1 || new_file_offset > file_segment_write_offset)
                 {
                     auto file_segment_path = file_segment.getPathInLocalCache();

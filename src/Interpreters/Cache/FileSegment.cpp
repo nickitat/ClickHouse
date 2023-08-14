@@ -74,13 +74,13 @@ FileSegment::FileSegment(
         case (State::DOWNLOADED):
         {
             reserved_size = downloaded_size = size_;
-            LOG_DEBUG(
-                &Poco::Logger::get("debug"),
-                "getPathInLocalCache()={}, size_={}, cache->getDisk()->getFileSize(getPathInLocalCache())={}",
-                getPathInLocalCache(),
-                size_,
-                cache->getDisk()->getFileSize(getPathInLocalCache()));
-            /* chassert(cache->getDisk()->getFileSize(getPathInLocalCache()) == size_); */
+            /* LOG_DEBUG( */
+            /* &Poco::Logger::get("debug"), */
+            /* "getPathInLocalCache()={}, size_={}, cache->getDisk()->getFileSize(getPathInLocalCache())={}", */
+            /* getPathInLocalCache(), */
+            /* size_, */
+            /* cache->getDisk()->getFileSize(getPathInLocalCache())); */
+            chassert(cache->getDisk()->getFileSize(getPathInLocalCache()) == size_);
             chassert(queue_iterator);
             chassert(key_metadata.lock());
             break;
@@ -382,12 +382,12 @@ void FileSegment::write(const char * from, size_t size, size_t offset)
 
     try
     {
-        LOG_DEBUG(
-            &Poco::Logger::get("debug"),
-            "write() getPathInLocalCache()={}, offset={}, size={}",
-            getPathInLocalCache(),
-            offset,
-            size);
+        /* LOG_DEBUG( */
+        /* &Poco::Logger::get("debug"), */
+        /* "write() getPathInLocalCache()={}, offset={}, size={}", */
+        /* getPathInLocalCache(), */
+        /* offset, */
+        /* size); */
 
         cache_writer->write(from, size);
 
@@ -395,19 +395,19 @@ void FileSegment::write(const char * from, size_t size, size_t offset)
 
         cache_writer->next();
 
-        LOG_DEBUG(
-            &Poco::Logger::get("debug"),
-            "write() fs::exists(getPathInLocalCache())={}, disk->exists()={}",
-            fs::exists(fs::path("./disks/cache_on_s3") / getPathInLocalCache()),
-            cache->getDisk()->exists(getPathInLocalCache()));
+        /* LOG_DEBUG( */
+        /* &Poco::Logger::get("debug"), */
+        /* "write() fs::exists(getPathInLocalCache())={}, disk->exists()={}", */
+        /* fs::exists(fs::path("./disks/cache_on_s3") / getPathInLocalCache()), */
+        /* cache->getDisk()->exists(getPathInLocalCache())); */
 
         cache_writer->sync();
 
-        LOG_DEBUG(
-            &Poco::Logger::get("debug"),
-            "write() fs::exists(getPathInLocalCache())={}, disk->exists()={}",
-            fs::exists(fs::path("./disks/cache_on_s3") / getPathInLocalCache()),
-            cache->getDisk()->exists(getPathInLocalCache()));
+        /* LOG_DEBUG( */
+        /* &Poco::Logger::get("debug"), */
+        /* "write() fs::exists(getPathInLocalCache())={}, disk->exists()={}", */
+        /* fs::exists(fs::path("./disks/cache_on_s3") / getPathInLocalCache()), */
+        /* cache->getDisk()->exists(getPathInLocalCache())); */
 
         downloaded_size += size;
 
@@ -565,7 +565,7 @@ void FileSegment::setDownloadedUnlocked(const FileSegmentGuard::Lock &)
 
     if (cache_writer)
     {
-        LOG_DEBUG(&Poco::Logger::get("debug"), "setDownloadedUnlocked() getPathInLocalCache()={}", getPathInLocalCache());
+        /* LOG_DEBUG(&Poco::Logger::get("debug"), "setDownloadedUnlocked() getPathInLocalCache()={}", getPathInLocalCache()); */
         cache_writer->finalize();
         cache_writer.reset();
         remote_file_reader.reset();

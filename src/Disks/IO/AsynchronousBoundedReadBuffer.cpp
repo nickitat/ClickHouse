@@ -187,15 +187,15 @@ bool AsynchronousBoundedReadBuffer::nextImpl()
         ProfileEventTimeIncrement<Microseconds> watch(ProfileEvents::SynchronousRemoteReadWaitMicroseconds);
 
         chassert(memory.size() == chooseBufferSizeForRemoteReading(read_settings, impl->getFileSize()));
-        LOG_DEBUG(
-            &Poco::Logger::get("debug"),
-            "__PRETTY_FUNCTION__={}, __LINE__={}, memory.data()={}, memory.size()={}, file_offset_of_buffer_end={}, bytes_to_ignore={}",
-            __PRETTY_FUNCTION__,
-            __LINE__,
-            static_cast<const void *>(memory.data()),
-            memory.size(),
-            file_offset_of_buffer_end,
-            bytes_to_ignore);
+        /* LOG_DEBUG( */
+        /* &Poco::Logger::get("debug"), */
+        /* "__PRETTY_FUNCTION__={}, __LINE__={}, memory.data()={}, memory.size()={}, file_offset_of_buffer_end={}, bytes_to_ignore={}", */
+        /* __PRETTY_FUNCTION__, */
+        /* __LINE__, */
+        /* static_cast<const void *>(memory.data()), */
+        /* memory.size(), */
+        /* file_offset_of_buffer_end, */
+        /* bytes_to_ignore); */
         std::tie(size, offset) = impl->readInto(memory.data(), memory.size(), file_offset_of_buffer_end, bytes_to_ignore);
 
         ProfileEvents::increment(ProfileEvents::RemoteFSUnprefetchedReads);

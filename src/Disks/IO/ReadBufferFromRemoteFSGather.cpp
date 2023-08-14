@@ -199,31 +199,31 @@ bool ReadBufferFromRemoteFSGather::moveToNextBuffer()
     return true;
 }
 
-static std::string describe(BufferBase & buf)
-{
-    auto addr_to_str = [](const char * ptr) { return static_cast<const void *>(ptr); };
-    auto desc
-        = [&](BufferBase::Buffer & b) { return fmt::format("addr_to_str(b.begin())={}, b.size()={}", addr_to_str(b.begin()), b.size()); };
+/* static std::string describe(BufferBase & buf) */
+/* { */
+/* auto addr_to_str = [](const char * ptr) { return static_cast<const void *>(ptr); }; */
+/* auto desc */
+/* = [&](BufferBase::Buffer & b) { return fmt::format("addr_to_str(b.begin())={}, b.size()={}", addr_to_str(b.begin()), b.size()); }; */
 
-    return fmt::format(
-        "\nbuf.available()={}, buf.count()={}, buf.offset()={}, buf.position()={},\n\tdesc(buf.buffer())={},\n\t"
-        "desc(buf.internalBuffer()));={}",
-        buf.available(),
-        buf.count(),
-        buf.offset(),
-        addr_to_str(buf.position()),
-        desc(buf.buffer()),
-        desc(buf.internalBuffer()));
-}
+/* return fmt::format( */
+/* "\nbuf.available()={}, buf.count()={}, buf.offset()={}, buf.position()={},\n\tdesc(buf.buffer())={},\n\t" */
+/* "desc(buf.internalBuffer()));={}", */
+/* buf.available(), */
+/* buf.count(), */
+/* buf.offset(), */
+/* addr_to_str(buf.position()), */
+/* desc(buf.buffer()), */
+/* desc(buf.internalBuffer())); */
+/* } */
 
 bool ReadBufferFromRemoteFSGather::readImpl()
 {
-    LOG_DEBUG(
-        &Poco::Logger::get("debug"),
-        "__PRETTY_FUNCTION__={}, __LINE__={}, describe(*current_buf)={}",
-        __PRETTY_FUNCTION__,
-        __LINE__,
-        describe(*current_buf));
+    /* LOG_DEBUG( */
+    /* &Poco::Logger::get("debug"), */
+    /* "__PRETTY_FUNCTION__={}, __LINE__={}, describe(*current_buf)={}", */
+    /* __PRETTY_FUNCTION__, */
+    /* __LINE__, */
+    /* describe(*current_buf)); */
 
     SwapHelper swap(*this, *current_buf);
 
@@ -270,15 +270,15 @@ void ReadBufferFromRemoteFSGather::setReadUntilPosition(size_t position)
     if (position == read_until_position)
         return;
 
-    LOG_DEBUG(
-        &Poco::Logger::get("debug"),
-        "position={}, read_until_position={}, available()={}, count()={}, offset()={}, file_offset_of_buffer_end={}",
-        position,
-        read_until_position,
-        available(),
-        count(),
-        offset(),
-        file_offset_of_buffer_end);
+    /* LOG_DEBUG( */
+    /* &Poco::Logger::get("debug"), */
+    /* "position={}, read_until_position={}, available()={}, count()={}, offset()={}, file_offset_of_buffer_end={}", */
+    /* position, */
+    /* read_until_position, */
+    /* available(), */
+    /* count(), */
+    /* offset(), */
+    /* file_offset_of_buffer_end); */
 
     reset();
     read_until_position = position;
