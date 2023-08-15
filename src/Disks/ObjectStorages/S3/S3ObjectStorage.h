@@ -214,7 +214,8 @@ public:
     std::string getName() const override { return "S3PlainObjectStorageForCache"; }
 
     template <class... Args>
-    explicit S3PlainObjectStorageForCache(Args &&... args) : S3PlainObjectStorage(std::forward<Args>(args)...)
+    explicit S3PlainObjectStorageForCache(Args &&... args)
+        : S3PlainObjectStorage(std::forward<Args>(args)...), in_flight_buffers(std::make_shared<InFlightBuffers>())
     {
         data_source_description.type = DataSourceType::S3_PlainForCache;
     }
@@ -246,8 +247,13 @@ private:
 
     class SuperWriteBufferFromFile;
 
-    mutable std::mutex m;
-    std::unordered_map<std::string, std::shared_ptr<SuperWriteBufferFromFile>> in_flight_buffers;
+    struct InFlightBuffers
+    {
+        mutable std::mutex m;
+        std::unordered_map<std::string, std::weak_ptr<SuperWriteBufferFromFile>> map;
+    };
+
+    std::shared_ptr<InFlightBuffers> in_flight_buffers;
 };
 }
 

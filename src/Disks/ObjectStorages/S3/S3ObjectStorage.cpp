@@ -1,4 +1,5 @@
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <Disks/ObjectStorages/S3/S3ObjectStorage.h>
 
@@ -156,11 +157,13 @@ bool S3ObjectStorage::exists(const StoredObject & object) const
     return S3::objectExists(*clients.get()->client, bucket, object.remote_path, {}, settings_ptr->request_settings, /* for_disk_s3= */ true);
 }
 
+thread_local bool flag = false;
+
 std::unique_ptr<ReadBufferFromFileBase> S3ObjectStorage::readObjects( /// NOLINT
     const StoredObjects & objects,
     const ReadSettings & read_settings,
     std::optional<size_t>,
-    std::optional<size_t>) const
+    std::optional<size_t> file_size) const
 {
     ReadSettings disk_read_settings = patchSettings(read_settings);
     auto global_context = Context::getGlobalContextInstance();
@@ -188,28 +191,31 @@ std::unique_ptr<ReadBufferFromFileBase> S3ObjectStorage::readObjects( /// NOLINT
     {
         case RemoteFSReadMethod::read:
         {
-            return std::make_unique<ReadBufferFromRemoteFSGather>(
-                std::move(read_buffer_creator),
-                objects,
-                disk_read_settings,
-                global_context->getFilesystemCacheLog(),
-                /* use_external_buffer */false);
-
+        return std::make_unique<ReadBufferFromRemoteFSGather>(
+            std::move(read_buffer_creator),
+            objects,
+            disk_read_settings,
+            global_context->getFilesystemCacheLog(),
+            /* use_external_buffer */ flag,
+            file_size);
         }
         case RemoteFSReadMethod::threadpool:
         {
-            auto impl = std::make_unique<ReadBufferFromRemoteFSGather>(
-                std::move(read_buffer_creator),
-                objects,
-                disk_read_settings,
-                global_context->getFilesystemCacheLog(),
-                /* use_external_buffer */true);
+        auto impl = std::make_unique<ReadBufferFromRemoteFSGather>(
+            std::move(read_buffer_creator),
+            objects,
+            disk_read_settings,
+            global_context->getFilesystemCacheLog(),
+            /* use_external_buffer */ true,
+            file_size);
 
-            auto & reader = global_context->getThreadPoolReader(FilesystemReaderType::ASYNCHRONOUS_REMOTE_FS_READER);
-            return std::make_unique<AsynchronousBoundedReadBuffer>(
-                std::move(impl), reader, disk_read_settings,
-                global_context->getAsyncReadCounters(),
-                global_context->getFilesystemReadPrefetchesLog());
+        auto & reader = global_context->getThreadPoolReader(FilesystemReaderType::ASYNCHRONOUS_REMOTE_FS_READER);
+        return std::make_unique<AsynchronousBoundedReadBuffer>(
+            std::move(impl),
+            reader,
+            disk_read_settings,
+            global_context->getAsyncReadCounters(),
+            global_context->getFilesystemReadPrefetchesLog());
         }
     }
 }
@@ -530,7 +536,11 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
     class ReadBuffer : public ReadBufferFromFileBase
     {
     public:
-        ReadBuffer(std::string & data_, const std::string & remote_path_) : data(data_), memory_reader(data), path(remote_path_)
+        ReadBuffer(
+            std::shared_ptr<std::string> data_,
+            const std::string & remote_path_,
+            std::shared_ptr<S3PlainObjectStorageForCache::SuperWriteBufferFromFile> in_flight_buffers_)
+            : data(data_), memory_reader(*data), path(remote_path_), in_flight_buffers(std::move(in_flight_buffers_))
         {
             /* LOG_DEBUG( */
             /* &Poco::Logger::get("debug"), */
@@ -542,7 +552,7 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
             /* describe(*this), */
             /* describe(memory_reader)); */
 
-            if (data.empty())
+            if (data->empty())
                 throw Exception(ErrorCodes::LOGICAL_ERROR, "Data buffer cannot be empty");
 
             updateBuffer();
@@ -553,7 +563,7 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
             /* __PRETTY_FUNCTION__, */
             /* __LINE__, */
             /* path, */
-            /* data.size(), */
+            /* data->size(), */
             /* describe(*this), */
             /* describe(memory_reader)); */
 
@@ -581,14 +591,14 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
 
         void setReadUntilPosition(size_t position) override
         {
-            if (position > data.size())
+            if (position > data->size())
                 throw Exception(
                     ErrorCodes::LOGICAL_ERROR,
                     "setReadUntilPosition: position={}, read_until_position={}, data.size()={}, describe(this)={}, "
                     "describe(memory_reader)={}",
                     position,
                     read_until_position,
-                    data.size(),
+                    data->size(),
                     describe(*this),
                     describe(memory_reader));
 
@@ -682,6 +692,8 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
             return read > 0;
         }
 
+        /* ~ReadBuffer() override { LOG_DEBUG(&Poco::Logger::get("debug"), "~ReadBuffer path={}", path); } */
+
     private:
         void updateBuffer()
         {
@@ -689,18 +701,27 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
             BufferBase::set(buf.begin(), buf.size(), memory_reader.offset());
         }
 
-        std::string & data;
+        std::shared_ptr<std::string> data;
 
         mutable ReadBufferFromString memory_reader;
         const std::string path;
         size_t read_until_position;
+
+        std::shared_ptr<S3PlainObjectStorageForCache::SuperWriteBufferFromFile> in_flight_buffers;
     };
 
     class WriteBuffer : public WriteBufferFromFileBase
     {
     public:
-        WriteBuffer(std::string & data_, std::unique_ptr<WriteBufferFromFileBase> impl_)
-            : WriteBufferFromFileBase(0, nullptr, 0), data(data_), memory_writer(data), remote_writer(std::move(impl_))
+        WriteBuffer(
+            std::shared_ptr<std::string> data_,
+            std::unique_ptr<WriteBufferFromFileBase> impl_,
+            std::shared_ptr<S3PlainObjectStorageForCache::SuperWriteBufferFromFile> in_flight_buffers_)
+            : WriteBufferFromFileBase(0, nullptr, 0)
+            , data(data_)
+            , memory_writer(*data)
+            , remote_writer(std::move(impl_))
+            , in_flight_buffers(std::move(in_flight_buffers_))
         {
             /* LOG_DEBUG( */
             /* &Poco::Logger::get("debug"), */
@@ -759,7 +780,7 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
             /* "__PRETTY_FUNCTION__={}, __LINE__={}, data.size()={}, describe(*this)={}, describe(memory_writer)={}", */
             /* __PRETTY_FUNCTION__, */
             /* __LINE__, */
-            /* data.size(), */
+            /* data->size(), */
             /* describe(*this), */
             /* describe(memory_writer)); */
 
@@ -776,20 +797,31 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
             /* describe(*this), */
             /* describe(memory_writer)); */
 
-            memory_writer.set(data.data(), count(), count());
+            memory_writer.set(data->data(), count(), count());
 
             /* LOG_DEBUG( */
             /* &Poco::Logger::get("debug"), */
             /* "__PRETTY_FUNCTION__={}, __LINE__={}, data.size()={}, describe(*this)={}, describe(memory_writer)={}", */
             /* __PRETTY_FUNCTION__, */
             /* __LINE__, */
-            /* data.size(), */
+            /* data->size(), */
             /* describe(*this), */
             /* describe(memory_writer)); */
 
-            remote_writer->write(data.data(), memory_writer.count());
+            remote_writer->write(data->data(), memory_writer.count());
             remote_writer->finalize();
+            /* remote_writer->sync(); */
+
+            /* LOG_DEBUG( */
+            /* &Poco::Logger::get("debug"), */
+            /* "__PRETTY_FUNCTION__={}, describe(*this)={}, describe(memory_writer)={}, describe(*remote_writer)={}", */
+            /* __PRETTY_FUNCTION__, */
+            /* describe(*this), */
+            /* describe(memory_writer), */
+            /* describe(*remote_writer)); */
         }
+
+        /* ~WriteBuffer() override { LOG_DEBUG(&Poco::Logger::get("debug"), "~WriteBuffer path={}", remote_writer->getFileName()); } */
 
     private:
         void updateBuffer()
@@ -798,57 +830,90 @@ class S3PlainObjectStorageForCache::SuperWriteBufferFromFile
             BufferBase::set(buf.begin(), buf.size(), memory_writer.offset());
         }
 
-        std::string & data;
+        std::shared_ptr<std::string> data;
 
         WriteBufferFromString memory_writer;
         std::unique_ptr<WriteBufferFromFileBase> remote_writer;
+
+        std::shared_ptr<S3PlainObjectStorageForCache::SuperWriteBufferFromFile> in_flight_buffers;
     };
 
 public:
     explicit SuperWriteBufferFromFile(const std::string & remote_path_)
-        : remote_path(remote_path_), data(FILECACHE_DEFAULT_MAX_FILE_SEGMENT_SIZE, '\0')
+        : remote_path(remote_path_), data(std::make_shared<std::string>(FILECACHE_DEFAULT_MAX_FILE_SEGMENT_SIZE, '\0'))
     {
     }
 
-    std::unique_ptr<ReadBufferFromFileBase> getReadBuffer() { return std::make_unique<ReadBuffer>(data, remote_path); }
+    ~SuperWriteBufferFromFile() { LOG_DEBUG(&Poco::Logger::get("debug"), "~SuperWriteBufferFromFile {}", remote_path); }
 
-    std::unique_ptr<WriteBufferFromFileBase> getWriteBuffer(std::unique_ptr<WriteBufferFromFileBase> impl)
+    std::unique_ptr<ReadBufferFromFileBase>
+    getReadBuffer(std::shared_ptr<S3PlainObjectStorageForCache::SuperWriteBufferFromFile> in_flight_buffers_)
     {
-        auto ret = std::make_unique<WriteBuffer>(data, std::move(impl));
+        return std::make_unique<ReadBuffer>(data, remote_path, std::move(in_flight_buffers_));
+    }
+
+    std::unique_ptr<WriteBufferFromFileBase> getWriteBuffer(
+        std::unique_ptr<WriteBufferFromFileBase> impl,
+        std::shared_ptr<S3PlainObjectStorageForCache::SuperWriteBufferFromFile> in_flight_buffers_)
+    {
+        auto ret = std::make_unique<WriteBuffer>(data, std::move(impl), std::move(in_flight_buffers_));
         return ret;
     }
 
-private:
     const std::string remote_path;
 
-    std::string data;
+private:
+    /// Read/WriteBuffer dying will remove SuperWriteBufferFromFile from `in_flight_buffers`.
+    /// And if it was WriteBuffer, then in dtor it will resize `data`, so it should outlive `SuperWriteBufferFromFile`.
+    std::shared_ptr<std::string> data;
 };
 
 S3PlainObjectStorageForCache::~S3PlainObjectStorageForCache() = default;
 
 std::unique_ptr<ReadBufferFromFileBase> S3PlainObjectStorageForCache::readObjects( /// NOLINT
-    const StoredObjects & objects,
+    const StoredObjects & objects_,
     const ReadSettings & read_settings,
     std::optional<size_t> read_hint,
-    std::optional<size_t> file_size) const
+    std::optional<size_t>) const
 {
+    StoredObjects objects = objects_;
+
     if (objects.size() != 1)
         throw Exception(ErrorCodes::BAD_ARGUMENTS, "Expected only single object in arguments");
 
-    /* LOG_DEBUG( */
-    /* &Poco::Logger::get("debug"), */
-    /* "readObjects: objects.front().local_path={}, objects.front().remote_path={}", */
-    /* objects.front().local_path, */
-    /* objects.front().remote_path); */
-
     {
-        std::lock_guard lock(m);
+        std::lock_guard lock(in_flight_buffers->m);
+
+        /* LOG_DEBUG( */
+        /* &Poco::Logger::get("debug"), */
+        /* "readObjects: objects.front().local_path={}, objects.front().remote_path={}", */
+        /* objects.front().local_path, */
+        /* objects.front().remote_path); */
+
+        /* std::string paths; */
+        /* for (const auto & [path, _] : in_flight_buffers->map) */
+        /* paths += path + ","; */
+        /* LOG_DEBUG(&Poco::Logger::get("debug"), "readObjects paths={}", paths); */
+
         const auto & path = objects.front().remote_path;
-        if (auto it = in_flight_buffers.find(path); it != in_flight_buffers.end())
-            return it->second->getReadBuffer();
+        if (auto it = in_flight_buffers->map.find(path); it != in_flight_buffers->map.end())
+            if (auto ifb = it->second.lock())
+                return ifb->getReadBuffer(ifb);
     }
 
-    return Base::readObjects(objects, read_settings, read_hint, file_size);
+    /// There is a race between requesting objects metadata from s3 for in-flight cache segment and actual reading from this segment in this function.
+    /// If object currently in-flight there is still no (accessible) metadata for it on s3. So we will have `bytes_size` == 0. And it is ok as far as
+    /// this object remains in-flight until this call is finished (because in this case we will use `S3PlainObjectStorageForCache::SuperWriteBufferFromFile::ReadBuffer`
+    /// that doesn't case about s3 metadata). But if the segment was finished after requesting metadata but before we found that it is already removed from
+    /// `in_flight_buffers` - we will end up with `ReadBufferFromRemoteFSGather` with incorrect state. So we just re-requesting object sizes here.
+    if (getTotalSize(objects) == 0)
+        for (auto & obj : objects)
+            obj.bytes_size = getObjectMetadata(obj.remote_path).size_bytes;
+
+    flag = true;
+    auto ret = Base::readObjects(objects, read_settings, read_hint);
+    flag = false;
+    return ret;
 }
 
 std::unique_ptr<WriteBufferFromFileBase> S3PlainObjectStorageForCache::writeObject( /// NOLINT
@@ -858,17 +923,33 @@ std::unique_ptr<WriteBufferFromFileBase> S3PlainObjectStorageForCache::writeObje
     size_t buf_size,
     const WriteSettings & write_settings)
 {
+    std::lock_guard lock(in_flight_buffers->m);
+
     /* LOG_DEBUG(&Poco::Logger::get("debug"), "writeObject: object.remote_path={}", object.remote_path); */
 
-    std::lock_guard lock(m);
     const auto & path = object.remote_path;
-    if (auto it = in_flight_buffers.find(path); it != in_flight_buffers.end())
+    if (auto it = in_flight_buffers->map.find(path); it != in_flight_buffers->map.end())
         throw Exception(ErrorCodes::LOGICAL_ERROR, "There should be only one write buffer instance for each path at every point in time");
 
+    /* std::string paths; */
+    /* for (const auto & [p, _] : in_flight_buffers->map) */
+    /* paths += p + ","; */
+    /* LOG_DEBUG(&Poco::Logger::get("debug"), "writeObjects paths={}", paths); */
+
     auto impl_buffer = Base::writeObject(object, mode, attributes, buf_size, write_settings);
-    auto super_buffer = std::make_shared<SuperWriteBufferFromFile>(path);
-    auto ret = super_buffer->getWriteBuffer(std::move(impl_buffer));
-    in_flight_buffers.emplace(path, std::move(super_buffer));
+    auto super_buffer = std::shared_ptr<SuperWriteBufferFromFile>(
+        new SuperWriteBufferFromFile{path},
+        [this](auto ptr)
+        {
+            {
+                std::lock_guard l(in_flight_buffers->m);
+                in_flight_buffers->map.erase(ptr->remote_path);
+            }
+
+            delete ptr;
+        });
+    auto ret = super_buffer->getWriteBuffer(std::move(impl_buffer), super_buffer);
+    in_flight_buffers->map.emplace(path, super_buffer);
     return ret;
 }
 }

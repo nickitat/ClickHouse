@@ -171,7 +171,7 @@ CachedOnDiskReadBufferFromFile::getCacheReadBuffer(const FileSegment & file_segm
 
     /* LOG_DEBUG(&Poco::Logger::get("debug"), "getCacheReadBuffer() path={}, offset={}", path, file_offset_of_buffer_end); */
 
-    auto buf = cache->getDisk()->readFile(path, local_read_settings, std::nullopt, std::nullopt);
+    auto buf = cache->getDisk()->readFile(path, local_read_settings, std::nullopt, file_segment.range().size());
 
     if (getFileSizeFromReadBuffer(*buf) == 0)
         throw Exception(ErrorCodes::LOGICAL_ERROR, "Attempt to read from an empty cache file: {}", path);
