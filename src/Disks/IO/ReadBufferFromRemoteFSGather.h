@@ -1,11 +1,10 @@
 #pragma once
 
-#include <optional>
-#include <Disks/ObjectStorages/IObjectStorage.h>
-#include <IO/AsynchronousReader.h>
+#include "config.h"
 #include <IO/ReadBufferFromFile.h>
 #include <IO/ReadSettings.h>
-#include "config.h"
+#include <IO/AsynchronousReader.h>
+#include <Disks/ObjectStorages/IObjectStorage.h>
 
 namespace Poco { class Logger; }
 
@@ -29,8 +28,7 @@ public:
         const StoredObjects & blobs_to_read_,
         const ReadSettings & settings_,
         std::shared_ptr<FilesystemCacheLog> cache_log_,
-        bool use_external_buffer_,
-        std::optional<size_t> file_size_ = std::nullopt);
+        bool use_external_buffer_);
 
     ~ReadBufferFromRemoteFSGather() override;
 
@@ -44,7 +42,7 @@ public:
 
     IAsynchronousReader::Result readInto(char * data, size_t size, size_t offset, size_t ignore) override;
 
-    size_t getFileSize() override { return file_size ? *file_size : getTotalSize(blobs_to_read); }
+    size_t getFileSize() override { return getTotalSize(blobs_to_read); }
 
     size_t getFileOffsetOfBufferEnd() const override { return file_offset_of_buffer_end; }
 

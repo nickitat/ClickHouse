@@ -163,7 +163,7 @@ std::unique_ptr<ReadBufferFromFileBase> S3ObjectStorage::readObjects( /// NOLINT
     const StoredObjects & objects,
     const ReadSettings & read_settings,
     std::optional<size_t>,
-    std::optional<size_t> file_size) const
+    std::optional<size_t>) const
 {
     ReadSettings disk_read_settings = patchSettings(read_settings);
     auto global_context = Context::getGlobalContextInstance();
@@ -196,8 +196,7 @@ std::unique_ptr<ReadBufferFromFileBase> S3ObjectStorage::readObjects( /// NOLINT
             objects,
             disk_read_settings,
             global_context->getFilesystemCacheLog(),
-            /* use_external_buffer */ flag,
-            file_size);
+            /* use_external_buffer */ flag);
         }
         case RemoteFSReadMethod::threadpool:
         {
@@ -206,8 +205,7 @@ std::unique_ptr<ReadBufferFromFileBase> S3ObjectStorage::readObjects( /// NOLINT
             objects,
             disk_read_settings,
             global_context->getFilesystemCacheLog(),
-            /* use_external_buffer */ true,
-            file_size);
+            /* use_external_buffer */ true);
 
         auto & reader = global_context->getThreadPoolReader(FilesystemReaderType::ASYNCHRONOUS_REMOTE_FS_READER);
         return std::make_unique<AsynchronousBoundedReadBuffer>(
