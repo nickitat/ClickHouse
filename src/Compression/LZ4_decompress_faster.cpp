@@ -477,7 +477,7 @@ template <> void inline copyOverlap<32, true>(UInt8 * op, const UInt8 *& match, 
 
 /// See also https://stackoverflow.com/a/30669632
 
-template <size_t copy_amount, bool use_shuffle>
+template <size_t copy_amount, bool use_shuffle, size_t unroll, size_t interleave>
 bool NO_INLINE decompressImpl(const char * const source, char * const dest, size_t source_size, size_t dest_size)
 {
     const UInt8 * ip = reinterpret_cast<const UInt8 *>(source);
@@ -486,9 +486,10 @@ bool NO_INLINE decompressImpl(const char * const source, char * const dest, size
     UInt8 * const output_begin = op;
     UInt8 * const output_end = op + dest_size;
 
-    /// Unrolling with clang is doing >10% performance degrade.
+/// Unrolling with clang is doing >10% performance degrade.
 #if defined(__clang__)
-    #pragma nounroll
+#    pragma clang loop interleave_count(interleave)
+#    pragma clang loop unroll_count(unroll)
 #endif
     while (true)
     {
@@ -644,12 +645,9 @@ bool NO_INLINE decompressImpl(const char * const source, char * const dest, size
 }
 
 
+template <size_t unroll, size_t interleave>
 bool decompress(
-    const char * const source,
-    char * const dest,
-    size_t source_size,
-    size_t dest_size,
-    PerformanceStatistics & statistics [[maybe_unused]])
+    const char * const source, char * const dest, size_t source_size, size_t dest_size, PerformanceStatistics & statistics [[maybe_unused]])
 {
     if (source_size == 0 || dest_size == 0)
         return true;
@@ -670,15 +668,15 @@ bool decompress(
         Stopwatch watch;
         bool success = true;
         if (best_variant == 0)
-            success = decompressImpl<16, true>(source, dest, source_size, dest_size);
+            success = decompressImpl<16, true, unroll, interleave>(source, dest, source_size, dest_size);
         if (best_variant == 1)
-            success = decompressImpl<16, false>(source, dest, source_size, dest_size);
+            success = decompressImpl<16, false, unroll, interleave>(source, dest, source_size, dest_size);
         if (best_variant == 2)
-            success = decompressImpl<8, true>(source, dest, source_size, dest_size);
+            success = decompressImpl<8, true, unroll, interleave>(source, dest, source_size, dest_size);
         if (best_variant == 3)
-            success = decompressImpl<32, false>(source, dest, source_size, dest_size);
+            success = decompressImpl<32, false, unroll, interleave>(source, dest, source_size, dest_size);
         if (best_variant == 4)
-            success = decompressImpl<32, true>(source, dest, source_size, dest_size);
+            success = decompressImpl<32, true, unroll, interleave>(source, dest, source_size, dest_size);
 
         watch.stop();
 
@@ -690,7 +688,7 @@ bool decompress(
     }
     else
     {
-        return decompressImpl<8, false>(source, dest, source_size, dest_size);
+        return decompressImpl<8, false, unroll, interleave>(source, dest, source_size, dest_size);
     }
 }
 
@@ -774,4 +772,73 @@ void statistics(
     }
 }
 
+template bool decompress<1, 1>(
+    const char * const source, /// NOLINT
+    char * const dest, /// NOLINT
+    size_t source_size,
+    size_t dest_size,
+    PerformanceStatistics & statistics);
+
+template bool decompress<1, 2>(
+    const char * const source, /// NOLINT
+    char * const dest, /// NOLINT
+    size_t source_size,
+    size_t dest_size,
+    PerformanceStatistics & statistics);
+
+template bool decompress<1, 4>(
+    const char * const source, /// NOLINT
+    char * const dest, /// NOLINT
+    size_t source_size,
+    size_t dest_size,
+    PerformanceStatistics & statistics);
+
+template bool decompress<1, 8>(
+    const char * const source, /// NOLINT
+    char * const dest, /// NOLINT
+    size_t source_size,
+    size_t dest_size,
+    PerformanceStatistics & statistics);
+
+template bool decompress<2, 1>(
+    const char * const source, /// NOLINT
+    char * const dest, /// NOLINT
+    size_t source_size,
+    size_t dest_size,
+    PerformanceStatistics & statistics);
+
+template bool decompress<2, 2>(
+    const char * const source, /// NOLINT
+    char * const dest, /// NOLINT
+    size_t source_size,
+    size_t dest_size,
+    PerformanceStatistics & statistics);
+
+template bool decompress<2, 4>(
+    const char * const source, /// NOLINT
+    char * const dest, /// NOLINT
+    size_t source_size,
+    size_t dest_size,
+    PerformanceStatistics & statistics);
+
+template bool decompress<4, 1>(
+    const char * const source, /// NOLINT
+    char * const dest, /// NOLINT
+    size_t source_size,
+    size_t dest_size,
+    PerformanceStatistics & statistics);
+
+template bool decompress<4, 2>(
+    const char * const source, /// NOLINT
+    char * const dest, /// NOLINT
+    size_t source_size,
+    size_t dest_size,
+    PerformanceStatistics & statistics);
+
+template bool decompress<4, 4>(
+    const char * const source, /// NOLINT
+    char * const dest, /// NOLINT
+    size_t source_size,
+    size_t dest_size,
+    PerformanceStatistics & statistics);
 }

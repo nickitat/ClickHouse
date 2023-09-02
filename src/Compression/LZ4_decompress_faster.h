@@ -129,6 +129,7 @@ struct PerformanceStatistics
 
 /** This method dispatch to one of different implementations depending on performance statistics.
   */
+template <size_t unroll = 1, size_t interleave = 1>
 bool decompress(
     const char * const source, /// NOLINT
     char * const dest, /// NOLINT
