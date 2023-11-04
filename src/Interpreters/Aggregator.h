@@ -7,10 +7,11 @@
 
 
 #include <base/StringRef.h>
+#include "Common/HashTable/HashTable.h"
 #include <Common/HashTable/FixedHashMap.h>
 #include <Common/HashTable/HashMap.h>
-#include <Common/HashTable/TwoLevelHashMap.h>
 #include <Common/HashTable/StringHashMap.h>
+#include <Common/HashTable/TwoLevelHashMap.h>
 #include <Common/HashTable/TwoLevelStringHashMap.h>
 
 #include <Common/ThreadPool.h>
@@ -37,6 +38,8 @@
 #include <Columns/ColumnLowCardinality.h>
 
 #include <Parsers/IAST_fwd.h>
+
+#include <Common/NewAllocator.h>
 
 namespace DB
 {
@@ -69,30 +72,41 @@ using Arenas = std::vector<ArenaPtr>;
   *  best suited for different cases, and this approach is just one of them, chosen for a combination of reasons.
   */
 
+template <typename A, typename B, typename C>
+using NewHashMap = HashMap<A, B, C, HashTableGrowerWithPrecalculation<>, YAArenaAllocator<1073741824, void>>;
+
+template <typename Key, typename Mapped, typename Hash>
+using NewTwoLevelHashMap = TwoLevelHashMapTable<
+    Key,
+    HashMapCell<Key, Mapped, Hash>,
+    Hash,
+    HashTableGrowerWithPrecalculation<>,
+    YAArenaAllocator<1073741824, void>>;
+
 using AggregatedDataWithoutKey = AggregateDataPtr;
 
 using AggregatedDataWithUInt8Key = FixedImplicitZeroHashMapWithCalculatedSize<UInt8, AggregateDataPtr>;
 using AggregatedDataWithUInt16Key = FixedImplicitZeroHashMap<UInt16, AggregateDataPtr>;
 
-using AggregatedDataWithUInt32Key = HashMap<UInt32, AggregateDataPtr, HashCRC32<UInt32>>;
-using AggregatedDataWithUInt64Key = HashMap<UInt64, AggregateDataPtr, HashCRC32<UInt64>>;
+using AggregatedDataWithUInt32Key = NewHashMap<UInt32, AggregateDataPtr, HashCRC32<UInt32>>;
+using AggregatedDataWithUInt64Key = NewHashMap<UInt64, AggregateDataPtr, HashCRC32<UInt64>>;
 
 using AggregatedDataWithShortStringKey = StringHashMap<AggregateDataPtr>;
 
 using AggregatedDataWithStringKey = HashMapWithSavedHash<StringRef, AggregateDataPtr>;
 
-using AggregatedDataWithKeys128 = HashMap<UInt128, AggregateDataPtr, UInt128HashCRC32>;
-using AggregatedDataWithKeys256 = HashMap<UInt256, AggregateDataPtr, UInt256HashCRC32>;
+using AggregatedDataWithKeys128 = NewHashMap<UInt128, AggregateDataPtr, UInt128HashCRC32>;
+using AggregatedDataWithKeys256 = NewHashMap<UInt256, AggregateDataPtr, UInt256HashCRC32>;
 
-using AggregatedDataWithUInt32KeyTwoLevel = TwoLevelHashMap<UInt32, AggregateDataPtr, HashCRC32<UInt32>>;
-using AggregatedDataWithUInt64KeyTwoLevel = TwoLevelHashMap<UInt64, AggregateDataPtr, HashCRC32<UInt64>>;
+using AggregatedDataWithUInt32KeyTwoLevel = NewTwoLevelHashMap<UInt32, AggregateDataPtr, HashCRC32<UInt32>>;
+using AggregatedDataWithUInt64KeyTwoLevel = NewTwoLevelHashMap<UInt64, AggregateDataPtr, HashCRC32<UInt64>>;
 
 using AggregatedDataWithShortStringKeyTwoLevel = TwoLevelStringHashMap<AggregateDataPtr>;
 
 using AggregatedDataWithStringKeyTwoLevel = TwoLevelHashMapWithSavedHash<StringRef, AggregateDataPtr>;
 
-using AggregatedDataWithKeys128TwoLevel = TwoLevelHashMap<UInt128, AggregateDataPtr, UInt128HashCRC32>;
-using AggregatedDataWithKeys256TwoLevel = TwoLevelHashMap<UInt256, AggregateDataPtr, UInt256HashCRC32>;
+using AggregatedDataWithKeys128TwoLevel = NewTwoLevelHashMap<UInt128, AggregateDataPtr, UInt128HashCRC32>;
+using AggregatedDataWithKeys256TwoLevel = NewTwoLevelHashMap<UInt256, AggregateDataPtr, UInt256HashCRC32>;
 
 /** Variants with better hash function, using more than 32 bits for hash.
   * Using for merging phase of external aggregation, where number of keys may be far greater than 4 billion,
@@ -101,10 +115,10 @@ using AggregatedDataWithKeys256TwoLevel = TwoLevelHashMap<UInt256, AggregateData
   *  but also for huge aggregation results on machines with terabytes of RAM.
   */
 
-using AggregatedDataWithUInt64KeyHash64 = HashMap<UInt64, AggregateDataPtr, DefaultHash<UInt64>>;
+using AggregatedDataWithUInt64KeyHash64 = NewHashMap<UInt64, AggregateDataPtr, DefaultHash<UInt64>>;
 using AggregatedDataWithStringKeyHash64 = HashMapWithSavedHash<StringRef, AggregateDataPtr, StringRefHash64>;
-using AggregatedDataWithKeys128Hash64 = HashMap<UInt128, AggregateDataPtr, UInt128Hash>;
-using AggregatedDataWithKeys256Hash64 = HashMap<UInt256, AggregateDataPtr, UInt256Hash>;
+using AggregatedDataWithKeys128Hash64 = NewHashMap<UInt128, AggregateDataPtr, UInt128Hash>;
+using AggregatedDataWithKeys256Hash64 = NewHashMap<UInt256, AggregateDataPtr, UInt256Hash>;
 
 template <typename Base>
 struct AggregationDataWithNullKey : public Base
@@ -170,18 +184,20 @@ using AggregatedDataWithNullableShortStringKey = AggregationDataWithNullKey<Aggr
 
 
 using AggregatedDataWithNullableUInt32KeyTwoLevel = AggregationDataWithNullKeyTwoLevel<
-    TwoLevelHashMap<UInt32, AggregateDataPtr, HashCRC32<UInt32>,
-                    TwoLevelHashTableGrower<>, HashTableAllocator, HashTableWithNullKey>>;
+    TwoLevelHashMap<UInt32, AggregateDataPtr, HashCRC32<UInt32>, TwoLevelHashTableGrower<>, HashTableAllocator, HashTableWithNullKey>>;
 using AggregatedDataWithNullableUInt64KeyTwoLevel = AggregationDataWithNullKeyTwoLevel<
-        TwoLevelHashMap<UInt64, AggregateDataPtr, HashCRC32<UInt64>,
-        TwoLevelHashTableGrower<>, HashTableAllocator, HashTableWithNullKey>>;
+    TwoLevelHashMap<UInt64, AggregateDataPtr, HashCRC32<UInt64>, TwoLevelHashTableGrower<>, HashTableAllocator, HashTableWithNullKey>>;
 
 using AggregatedDataWithNullableShortStringKeyTwoLevel = AggregationDataWithNullKeyTwoLevel<
         TwoLevelStringHashMap<AggregateDataPtr, HashTableAllocator, StringHashTableWithNullKey>>;
 
-using AggregatedDataWithNullableStringKeyTwoLevel = AggregationDataWithNullKeyTwoLevel<
-        TwoLevelHashMapWithSavedHash<StringRef, AggregateDataPtr, DefaultHash<StringRef>,
-        TwoLevelHashTableGrower<>, HashTableAllocator, HashTableWithNullKey>>;
+using AggregatedDataWithNullableStringKeyTwoLevel = AggregationDataWithNullKeyTwoLevel<TwoLevelHashMapWithSavedHash<
+    StringRef,
+    AggregateDataPtr,
+    DefaultHash<StringRef>,
+    TwoLevelHashTableGrower<>,
+    HashTableAllocator,
+    HashTableWithNullKey>>;
 
 /// For the case where there is one numeric key.
 /// FieldType is UInt8/16/32/64 for any type with corresponding bit width.
