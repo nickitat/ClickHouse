@@ -1,30 +1,31 @@
 #pragma once
 
+#include <string>
 #include <unordered_map>
-#include <IO/WriteSettings.h>
 #include <Core/Block.h>
-#include <base/types.h>
-#include <base/defines.h>
 #include <Core/NamesAndTypes.h>
+#include <DataTypes/Serializations/SerializationInfo.h>
+#include <IO/WriteSettings.h>
+#include <Interpreters/TransactionVersionMetadata.h>
+#include <Storages/ColumnsDescription.h>
 #include <Storages/IStorage.h>
 #include <Storages/MergeTree/AlterConversions.h>
 #include <Storages/MergeTree/IDataPartStorage.h>
+#include <Storages/MergeTree/IPartMetadataManager.h>
+#include <Storages/MergeTree/KeyCondition.h>
+#include <Storages/MergeTree/MergeTreeDataPartBuilder.h>
+#include <Storages/MergeTree/MergeTreeDataPartChecksum.h>
 #include <Storages/MergeTree/MergeTreeDataPartState.h>
+#include <Storages/MergeTree/MergeTreeDataPartTTLInfo.h>
+#include <Storages/MergeTree/MergeTreeIOSettings.h>
 #include <Storages/MergeTree/MergeTreeIndexGranularity.h>
 #include <Storages/MergeTree/MergeTreeIndexGranularityInfo.h>
 #include <Storages/MergeTree/MergeTreeIndices.h>
 #include <Storages/MergeTree/MergeTreePartInfo.h>
 #include <Storages/MergeTree/MergeTreePartition.h>
-#include <Storages/MergeTree/MergeTreeDataPartChecksum.h>
-#include <Storages/MergeTree/MergeTreeDataPartTTLInfo.h>
-#include <Storages/MergeTree/MergeTreeIOSettings.h>
 #include <Storages/Statistics/Statistics.h>
-#include <Storages/MergeTree/KeyCondition.h>
-#include <Storages/MergeTree/MergeTreeDataPartBuilder.h>
-#include <Storages/ColumnsDescription.h>
-#include <Interpreters/TransactionVersionMetadata.h>
-#include <DataTypes/Serializations/SerializationInfo.h>
-#include <Storages/MergeTree/IPartMetadataManager.h>
+#include <base/defines.h>
+#include <base/types.h>
 
 
 namespace zkutil
@@ -560,6 +561,8 @@ public:
     mutable std::atomic<DataPartRemovalState> removal_state = DataPartRemovalState::NOT_ATTEMPTED;
 
     mutable std::atomic<time_t> last_removal_attempt_time = 0;
+
+    std::string getPartStateForDebugLogging() const;
 
 protected:
     /// Primary key (correspond to primary.idx file).

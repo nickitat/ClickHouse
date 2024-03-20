@@ -2088,27 +2088,32 @@ void IMergeTreeDataPart::checkConsistency(bool require_part_metadata) const
     }
     catch (Exception & e)
     {
-        const auto part_state = fmt::format(
-            "state: {}, is_unexpected_local_part: {}, is_frozen: {}, is_duplicate: {}",
-            stateString(),
-            is_unexpected_local_part,
-            is_frozen,
-            is_duplicate,
-            is_temp);
-
-        const auto debug_info = fmt::format(
-            "columns: {}, getMarkSizeInBytes: {}, getMarksCount: {}, index_granularity_info: [{}], index_granularity: [{}], "
-            "part_state: [{}]",
-            columns.toString(),
-            index_granularity_info.getMarkSizeInBytes(columns.size()),
-            index_granularity.getMarksCount(),
-            index_granularity_info.describe(),
-            index_granularity.describe(),
-            part_state);
-
-        e.addMessage(debug_info);
+        e.addMessage(getPartStateForDebugLogging());
         e.rethrow();
     }
+}
+
+std::string IMergeTreeDataPart::getPartStateForDebugLogging() const
+{
+    const auto part_state = fmt::format(
+        "type: {}, state: {}, is_unexpected_local_part: {}, is_frozen: {}, is_duplicate: {}, is_temp: {}",
+        part_type.toString(),
+        stateString(),
+        is_unexpected_local_part,
+        is_frozen,
+        is_duplicate,
+        is_temp);
+
+    return fmt::format(
+        "name: {}, parent_part_name: {}, getMarkSizeInBytes: {}, getMarksCount: {}, index_granularity_info: [{}], index_granularity: [{}], "
+        "part_state: [{}]",
+        name,
+        parent_part_name,
+        index_granularity_info.getMarkSizeInBytes(columns.size()),
+        index_granularity.getMarksCount(),
+        index_granularity_info.describe(),
+        index_granularity.describe(),
+        part_state);
 }
 
 void IMergeTreeDataPart::doCheckConsistency(bool /* require_part_metadata */) const

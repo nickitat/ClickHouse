@@ -1,6 +1,7 @@
-#include <Storages/MergeTree/MergeTreeReadPoolBase.h>
-#include <Storages/MergeTree/MergeTreeBlockReadUtils.h>
+#include <cstdint>
 #include <Storages/MergeTree/LoadedMergeTreeDataPartInfoForReader.h>
+#include <Storages/MergeTree/MergeTreeBlockReadUtils.h>
+#include <Storages/MergeTree/MergeTreeReadPoolBase.h>
 
 
 namespace DB
@@ -115,6 +116,10 @@ MergeTreeReadTaskPtr MergeTreeReadPoolBase::createTask(
 
     auto get_part_name = [](const auto & task_info) -> const String &
     {
+        if (task_info.data_part->isProjectionPart() && reinterpret_cast<uintptr_t>(task_info.data_part->getParentPart()) < 123)
+            throw Exception(
+                ErrorCodes::LOGICAL_ERROR, "Part has an invalid parent part: {}", task_info.data_part->getPartStateForDebugLogging());
+
         return task_info.data_part->isProjectionPart() ? task_info.data_part->getParentPart()->name : task_info.data_part->name;
     };
 
