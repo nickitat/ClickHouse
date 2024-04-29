@@ -326,6 +326,7 @@ target_link_libraries (clickhouse_compression
         PRIVATE
             ch_contrib::lz4
             ch_contrib::roaring
+            ch_contrib::alp
 )
 
 # Use X86 AVX2/AVX512 instructions to accelerate filter operations
@@ -342,6 +343,9 @@ if (ENABLE_QPL)
             Compression/CompressionCodecDeflateQpl.cpp
             PROPERTIES COMPILE_FLAGS "-mwaitpkg")
 endif ()
+
+set_source_files_properties(Compression/CompressionCodecALP.cpp PROPERTIES COMPILE_FLAGS
+        "-Wno-error=old-style-cast -Wno-error=float-conversion -Wno-error=extra-semi -Wno-error=newline-eof -Wno-error=shadow-field-in-constructor -Wno-error=shadow")
 
 target_link_libraries(clickhouse_common_io
         PUBLIC
@@ -618,6 +622,10 @@ endif()
 if (TARGET ch_rust::skim)
     dbms_target_include_directories(PRIVATE $<TARGET_PROPERTY:ch_rust::skim,INTERFACE_INCLUDE_DIRECTORIES>)
     dbms_target_link_libraries(PUBLIC ch_rust::skim)
+endif()
+
+if (TARGET ch_contrib::alp)
+    dbms_target_link_libraries(PRIVATE ch_contrib::alp)
 endif()
 
 if (ENABLE_TESTS)
