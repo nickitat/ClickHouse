@@ -1,12 +1,14 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 #include <Compression/CompressionFactory.h>
 #include <Compression/CompressionInfo.h>
 #include <Compression/ICompressionCodec.h>
 #include <DataTypes/IDataType.h>
 #include <Parsers/IAST.h>
+#include <__ranges/concepts.h>
 #include <alp/compressor.hpp>
 #include <alp/decompressor.hpp>
 #include <base/unaligned.h>
@@ -18,6 +20,9 @@
 #include <libdivide-config.h>
 
 #include <alp.hpp>
+
+#include <Poco/Logger.h>
+#include <Common/logger_useful.h>
 
 namespace DB
 {
@@ -78,8 +83,18 @@ UInt32 CompressionCodecALP::doCompressData(const char * source, UInt32 source_si
 {
     if (reinterpret_cast<uintptr_t>(source) % sizeof(double))
         throw Exception(ErrorCodes::LOGICAL_ERROR, "doCompressData source ({}) % sizeof(double)", reinterpret_cast<uintptr_t>(source));
+
+    size_t skipped = 0;
     if (reinterpret_cast<uintptr_t>(dest) % sizeof(double))
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "doCompressData dest ({}) % sizeof(double)", reinterpret_cast<uintptr_t>(dest));
+    {
+        skipped = sizeof(double) - (reinterpret_cast<uintptr_t>(dest) % sizeof(double));
+        /* throw Exception(ErrorCodes::LOGICAL_ERROR, "doCompressData dest ({}) % sizeof(double)", reinterpret_cast<uintptr_t>(dest)); */
+    }
+    unalignedStore<size_t>(dest, skipped);
+    dest += sizeof(size_t) + skipped;
+
+    if (reinterpret_cast<uintptr_t>(dest) % sizeof(double))
+        throw Exception(ErrorCodes::LOGICAL_ERROR, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 
     if (source_size % sizeof(double))
         throw Exception(ErrorCodes::LOGICAL_ERROR, "source_size ({}) % sizeof(double)", source_size);
@@ -88,24 +103,49 @@ UInt32 CompressionCodecALP::doCompressData(const char * source, UInt32 source_si
     dest += sizeof(size_t);
 
     auto compressor = std::make_unique<alp::AlpCompressor>();
-    std::vector<double> in(values);
+    double * in = reinterpret_cast<double *>(const_cast<char *>(source));
     for (size_t i = 0; i < values; ++i)
     {
         /* memcpy(in.data() + i, source + i * sizeof(double), sizeof(double)); */
-        in[i] = unalignedLoad<double>(source + i * sizeof(double));
+        /* in[i] = unalignedLoad<double>(source + i * sizeof(double)); */
         if (in[i] < 0)
             throw Exception(ErrorCodes::LOGICAL_ERROR, "in[i] < 0: {}", in[i]);
     }
-    compressor->compress(in.data(), values, reinterpret_cast<uint8_t *>(dest));
-    return sizeof(size_t) + static_cast<UInt32>(compressor->get_size());
+    compressor->compress(in, values, reinterpret_cast<uint8_t *>(dest));
+
+    {
+        std::vector<double> res(alp::AlpApiUtils::align_value<size_t, alp::config::VECTOR_SIZE>(values));
+        auto decompressor = std::make_unique<alp::AlpDecompressor>();
+        decompressor->decompress(reinterpret_cast<uint8_t *>(const_cast<char *>(dest)), values, res.data());
+
+        bool print = false;
+        for (size_t i = 0; i < values; ++i)
+            if (in[i] != res[i])
+                print = true;
+        /* LOG_DEBUG(&Poco::Logger::get("debug"), "in[i]={}, res[i]={}", in[i], res[i]); */
+        /* throw Exception(ErrorCodes::LOGICAL_ERROR, "in[i] != res[i]: {}, {}", in[i], res[i]); */
+
+        if (!print)
+            LOG_DEBUG(
+                &Poco::Logger::get("debug"),
+                "in={}, source_size={}, skipped={}",
+                "in" /*fmt::join(std::vector<double>{in, in + values}, ", ")*/,
+                source_size,
+                skipped);
+    }
+
+    return 2 * sizeof(size_t) + static_cast<UInt32>(skipped + compressor->get_size());
 }
 
 void CompressionCodecALP::doDecompressData(const char * source, UInt32, char * dest, UInt32 uncompressed_size) const
 {
-    if (reinterpret_cast<uintptr_t>(source) % sizeof(double))
-        throw Exception(ErrorCodes::LOGICAL_ERROR, "doDecompressData source ({}) % sizeof(double)", reinterpret_cast<uintptr_t>(source));
+    /* if (reinterpret_cast<uintptr_t>(source) % sizeof(double)) */
+    /*     throw Exception(ErrorCodes::LOGICAL_ERROR, "doDecompressData source ({}) % sizeof(double)", reinterpret_cast<uintptr_t>(source)); */
     if (reinterpret_cast<uintptr_t>(dest) % sizeof(double))
         throw Exception(ErrorCodes::LOGICAL_ERROR, "doDecompressData dest ({}) % sizeof(double)", reinterpret_cast<uintptr_t>(dest));
+
+    const auto skipped = unalignedLoad<size_t>(source);
+    source += sizeof(size_t) + skipped;
 
     const auto values = unalignedLoad<size_t>(source);
     if (uncompressed_size != values * sizeof(double))
@@ -115,7 +155,7 @@ void CompressionCodecALP::doDecompressData(const char * source, UInt32, char * d
     std::vector<double> res(alp::AlpApiUtils::align_value<size_t, alp::config::VECTOR_SIZE>(values));
     auto decompressor = std::make_unique<alp::AlpDecompressor>();
     decompressor->decompress(reinterpret_cast<uint8_t *>(const_cast<char *>(source)), values, res.data());
-    memcpy(dest, res.data(), values * 8);
+    memcpy(dest, res.data(), values * sizeof(double));
 }
 
 void registerCodecALP(CompressionCodecFactory & factory)
